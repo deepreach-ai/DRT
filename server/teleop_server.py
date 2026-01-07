@@ -167,9 +167,12 @@ async def lifespan(app: FastAPI):
     """Manage application lifespan"""
     # Startup
     server = get_server()
-    print(f"[FastAPI] Teleoperation server started on http://localhost:8000")
+    # 获取当前配置的端口（从环境变量或默认值）
+    import os
+    port = int(os.getenv("TELEOP_PORT", "8000"))
+    print(f"[FastAPI] Teleoperation server started on http://localhost:{port}")
     print(f"[FastAPI] Backend type: {server.backend_type}")
-    print(f"[FastAPI] API Documentation: http://localhost:8000/docs")
+    print(f"[FastAPI] API Documentation: http://localhost:{port}/docs")
     yield
     # Shutdown
     if _server_instance:

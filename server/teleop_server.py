@@ -160,10 +160,27 @@ class TeleoperationServer:
         }
 
 
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application lifespan"""
+    # Startup
+    server = get_server()
+    print(f"[FastAPI] Teleoperation server started on http://localhost:8000")
+    print(f"[FastAPI] Backend type: {server.backend_type}")
+    print(f"[FastAPI] API Documentation: http://localhost:8000/docs")
+    yield
+    # Shutdown
+    if _server_instance:
+        _server_instance.shutdown()
+
+
 # FastAPI App
 app = FastAPI(title="Teleoperation Server", 
               description="Minimal teleoperation system for robot control",
-              version="1.0.0")
+              version="1.0.0",
+              lifespan=lifespan)
 
 # CORS middleware
 app.add_middleware(
@@ -187,22 +204,6 @@ def get_server() -> TeleoperationServer:
         _server_instance = TeleoperationServer(backend_type=backend)
         _server_instance.initialize()
     return _server_instance
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize server on startup"""
-    server = get_server()
-    print(f"[FastAPI] Teleoperation server started on http://localhost:8000")
-    print(f"[FastAPI] Backend type: {server.backend_type}")
-    print(f"[FastAPI] API Documentation: http://localhost:8000/docs")
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Shutdown server on shutdown"""
-    if _server_instance:
-        _server_instance.shutdown()
 
 
 @app.post("/api/v1/command")
@@ -324,4 +325,12 @@ def run_server(host: str = "0.0.0.0", port: int = 8000, backend_type: str = "moc
 
 
 if __name__ == "__main__":
-    run_server()
+    import argparse
+    parser = argparse.ArgumentParser(description="Teleoperation Server")
+    parser.add_argument("--host", type=str, default="0.0.0.0", help="Host address")
+    parser.add_argument("--port", type=int, default=8000, help="Port number")
+    parser.add_argument("--backend", type=str, default="mock", help="Backend type (mock or isaac)")
+    
+    args = parser.parse_args()
+    
+    run_server(host=args.host, port=args.port, backend_type=args.backend)

@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SO-ARM101D VR Demo</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b1220;
+        --surface: #111a2e;
+        --border: #22304f;
+        --text: #e6eef9;
+        --muted: #a9b7d0;
+        --accent: #4f8cff;
+        --danger: #ff4d4f;
+        --ok: #a6f4c5;
+        --warn: #ffd29b;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+        background: var(--bg);
+        color: var(--text);
+      }
+      .topbar {
+        height: 56px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 16px;
+        border-bottom: 1px solid var(--border);
+        background: rgba(17, 26, 46, 0.85);
+        backdrop-filter: blur(10px);
+        gap: 12px;
+      }
+      .title { font-weight: 700; }
+      .pill {
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        border: 1px solid var(--border);
+        color: var(--muted);
+      }
+      .pill.ok { color: var(--ok); border-color: rgba(110, 255, 170, 0.2); }
+      .pill.bad { color: #ffb4b4; border-color: rgba(255, 77, 79, 0.25); }
+      .pill.warn { color: var(--warn); border-color: rgba(255, 208, 120, 0.25); }
+      .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+      input {
+        padding: 8px 10px;
+        background: rgba(0,0,0,0.25);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        outline: none;
+        width: 220px;
+      }
+      button {
+        padding: 9px 12px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        background: rgba(79, 140, 255, 0.16);
+        color: var(--text);
+        cursor: pointer;
+      }
+      button.primary { border-color: rgba(79, 140, 255, 0.6); background: rgba(79, 140, 255, 0.22); }
+      button.danger { border-color: rgba(255, 77, 79, 0.6); background: rgba(255, 77, 79, 0.18); }
+      button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+      .layout {
+        display: grid;
+        grid-template-rows: 1fr 240px;
+        gap: 12px;
+        padding: 12px;
+        height: calc(100vh - 56px);
+      }
+      .panes {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+        min-height: 0;
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+        min-height: 0;
+      }
+      .cardHeader {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--border);
+      }
+      .cardBody {
+        height: calc(100% - 44px);
+      }
+      iframe {
+        width: 100%;
+        height: 100%;
+        border: 0;
+        background: #000;
+      }
+      .video {
+        width: 100%;
+        height: 100%;
+        display: block;
+        object-fit: cover;
+        background: rgba(0,0,0,0.35);
+      }
+      canvas {
+        width: 100%;
+        height: 100%;
+        display: block;
+        background: rgba(0,0,0,0.22);
+      }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+
+      @media (max-width: 1100px) {
+        .layout { height: auto; }
+        .panes { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="topbar">
+      <div class="row">
+        <div class="title">SO-ARM101D VR Demo</div>
+        <div id="connPill" class="pill warn">未连接</div>
+      </div>
+      <div class="row">
+        <input id="baseUrl" placeholder="Server Base URL（可空）" />
+        <input id="username" value="operator" placeholder="用户名" />
+        <input id="password" type="password" value="operator" placeholder="密码" />
+        <button id="loginBtn" class="primary">连接</button>
+        <button id="disconnectBtn" class="danger" disabled>断开</button>
+      </div>
+    </div>
+
+    <div class="layout">
+      <div class="panes">
+        <div class="card">
+          <div class="cardHeader">
+            <div>左：VR 视图（Simulated View）</div>
+            <div class="pill mono" id="vrPill">/web/vr.html</div>
+          </div>
+          <div class="cardBody">
+            <iframe id="vrFrame" src="about:blank" allow="xr-spatial-tracking; fullscreen"></iframe>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="cardHeader">
+            <div>右：真机视频（MJPEG）</div>
+            <div class="pill mono" id="videoPill">/api/v1/video/mjpeg</div>
+          </div>
+          <div class="cardBody">
+            <img id="videoImg" class="video" alt="video" />
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="cardHeader">
+          <div>下：双臂末端轨迹（state.robot.arms）</div>
+          <div class="pill mono" id="tsPill">ts: -</div>
+        </div>
+        <div class="cardBody">
+          <canvas id="traj" width="1600" height="240"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const $ = (id) => document.getElementById(id)
+
+      const state = {
+        token: null,
+        ws: null,
+        trajLeft: [],
+        trajRight: [],
+        maxLen: 500,
+      }
+
+      function setConn(text, cls) {
+        const el = $("connPill")
+        el.className = `pill ${cls || ""}`
+        el.textContent = text
+      }
+
+      function base() {
+        const v = $("baseUrl").value.trim()
+        return v ? v.replace(/\/$/, "") : ""
+      }
+
+      async function login() {
+        setConn("连接中…", "warn")
+        const res = await fetch(`${base()}/api/v1/auth/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: $("username").value,
+            password: $("password").value,
+          }),
+        })
+        if (!res.ok) {
+          const t = await res.text()
+          setConn("登录失败", "bad")
+          throw new Error(t)
+        }
+        const data = await res.json()
+        state.token = data.token
+
+        $("videoPill").textContent = data.video_url
+        $("videoImg").src = `${base()}${data.video_url}`
+
+        const vrUrl = `${base()}/web/vr.html?urdf=so101_dual&embed=1&autoconnect=1&autosim=1&token=${encodeURIComponent(state.token)}`
+        $("vrPill").textContent = "/web/vr.html?urdf=so101_dual"
+        $("vrFrame").src = vrUrl
+
+        connectWs(data.ws_url)
+        $("disconnectBtn").disabled = false
+        setConn("已连接", "ok")
+      }
+
+      function connectWs(wsUrl) {
+        if (state.ws) {
+          try { state.ws.close() } catch (_) {}
+        }
+        const url = wsUrl.startsWith("ws") ? wsUrl : `${base().replace(/^http/, "ws")}${wsUrl}`
+        const ws = new WebSocket(url)
+        state.ws = ws
+        ws.onopen = () => {}
+        ws.onclose = () => {
+          setConn("已断开", "bad")
+        }
+        ws.onerror = () => {
+          setConn("WS错误", "bad")
+        }
+        ws.onmessage = (ev) => {
+          let msg
+          try { msg = JSON.parse(ev.data) } catch (_) { return }
+          if (msg.type !== "state") return
+          const robot = msg.robot || {}
+          const arms = robot.arms || {}
+          const lp = arms.left && arms.left.position ? arms.left.position : null
+          const rp = arms.right && arms.right.position ? arms.right.position : (robot.position || null)
+
+          if (lp) pushTraj(state.trajLeft, lp)
+          if (rp) pushTraj(state.trajRight, rp)
+          $("tsPill").textContent = `ts: ${Number(msg.ts || 0).toFixed(3)}`
+          drawTraj()
+        }
+      }
+
+      function pushTraj(arr, p) {
+        arr.push([Number(p[0] || 0), Number(p[1] || 0), Number(p[2] || 0)])
+        if (arr.length > state.maxLen) arr.splice(0, arr.length - state.maxLen)
+      }
+
+      function drawTraj() {
+        const c = $("traj")
+        const ctx = c.getContext("2d")
+        const w = c.width
+        const h = c.height
+        ctx.clearRect(0, 0, w, h)
+        ctx.fillStyle = "rgba(0,0,0,0.18)"
+        ctx.fillRect(0, 0, w, h)
+
+        ctx.strokeStyle = "rgba(34,48,79,1)"
+        for (let x = 0; x <= w; x += 40) {
+          ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke()
+        }
+        for (let y = 0; y <= h; y += 40) {
+          ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke()
+        }
+
+        const scale = 260
+        const ox = w * 0.5
+        const oy = h * 0.5
+
+        drawPath(ctx, state.trajLeft, ox, oy, scale, "rgba(255,90,90,0.95)")
+        drawPath(ctx, state.trajRight, ox, oy, scale, "rgba(79,140,255,0.95)")
+
+        ctx.fillStyle = "rgba(230,240,255,0.9)"
+        ctx.font = "12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New"
+        ctx.fillText("红=Left arm  蓝=Right arm   (X-Y投影)", 14, 18)
+
+        drawDot(ctx, lastOf(state.trajLeft), ox, oy, scale, "rgba(255,210,90,1)")
+        drawDot(ctx, lastOf(state.trajRight), ox, oy, scale, "rgba(110,255,170,1)")
+      }
+
+      function drawPath(ctx, traj, ox, oy, scale, color) {
+        if (!traj || traj.length < 2) return
+        ctx.strokeStyle = color
+        ctx.lineWidth = 2
+        ctx.beginPath()
+        for (let i = 0; i < traj.length; i++) {
+          const p = traj[i]
+          const x = ox + p[0] * scale
+          const y = oy - p[1] * scale
+          if (i === 0) ctx.moveTo(x, y)
+          else ctx.lineTo(x, y)
+        }
+        ctx.stroke()
+        ctx.lineWidth = 1
+      }
+
+      function drawDot(ctx, p, ox, oy, scale, color) {
+        if (!p) return
+        const x = ox + p[0] * scale
+        const y = oy - p[1] * scale
+        ctx.fillStyle = color
+        ctx.beginPath(); ctx.arc(x, y, 6, 0, Math.PI * 2); ctx.fill()
+      }
+
+      function lastOf(arr) {
+        return arr && arr.length ? arr[arr.length - 1] : null
+      }
+
+      $("loginBtn").addEventListener("click", () => login().catch((e) => alert(`连接失败: ${e.message || e}`)))
+      $("disconnectBtn").addEventListener("click", () => {
+        try { state.ws && state.ws.close() } catch (_) {}
+        state.ws = null
+        state.token = null
+        $("videoImg").src = ""
+        $("vrFrame").src = "about:blank"
+        $("disconnectBtn").disabled = true
+        state.trajLeft = []
+        state.trajRight = []
+        drawTraj()
+        setConn("未连接", "warn")
+      })
+
+      setConn("未连接", "warn")
+      drawTraj()
+    </script>
+  </body>
+</html>
+

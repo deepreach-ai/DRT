@@ -1,0 +1,33 @@
+# Virtual Environment
+.venv/
+venv/
+env/
+
+# Node
+node_modules/
+package-lock.json
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Logs
+*.log
+
+# Internal Documents
+.trae/documents
+server/recordings/
+
+# Test output
+test_camera_frames/
+
+# Large binaries / media
+*.mp4
+*.pdf
+*.tar.gz
+
+# Certificates / secrets
+*.pem
+
+# Empty dirs
+librealsense/

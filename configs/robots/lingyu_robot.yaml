@@ -1,0 +1,18 @@
+robot_name: "LINGYU_ROBOT"
+dof: 7 # 根据URDF中的 LJ1-LJ7 和 RJ1-RJ7 实际上是双臂，这里先只用单臂（左臂）
+isaac_sim:
+  # 转换后的 USD 路径 (相对路径或 omniverse://)
+  usd_path: "assets/usd/lingyu_robot.usd"
+  default_position: [0.0, 0.0, 0.0]
+  default_orientation: [1.0, 0.0, 0.0, 0.0]
+  prim_path: "/World/Lingyu"
+  # URDF中定义的末端 Link
+  ee_frame: "Link_L8" 
+
+workspace_limits:
+  x: [-0.8, 0.8]
+  y: [-0.8, 0.8]
+  z: [0.0, 1.2]
+
+controller:
+  max_velocity: 0.8

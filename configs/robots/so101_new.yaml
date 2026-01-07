@@ -1,0 +1,21 @@
+robot_name: "SO_101"
+dof: 6
+manufacturer: "Unknown"
+
+isaac_sim:
+  usd_path: "assets/usd/so101.usd"
+  ee_frame: "ee_link"
+  prim_path: "/World/SO101"
+
+real_robot:
+  backend_type: "soarm"
+  connection:
+    port: "/dev/tty.usbmodem5B3E1224691"
+
+workspace_limits:
+  x: [-0.5, 0.5]
+  y: [-0.5, 0.5]
+  z: [0.0, 0.6]
+
+controller:
+  max_velocity: 0.3

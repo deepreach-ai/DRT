@@ -1,0 +1,244 @@
+<?xml version="1.0"?>
+<robot name="so101">
+  <link name="base">
+    <visual>
+      <origin xyz="0.006158111334850635 -9.927601868649634e-06 0.048831407117463144" rpy="-3.1334399553386025 -1.4740613436255572 -9.496822972964266e-05"/>
+      <geometry>
+        <mesh filename="assets/base_motor_holder_so101_v1.stl"/>
+      </geometry>
+    </visual>
+    <visual>
+      <origin xyz="0.012817863378088296 -3.514298535338844e-06 0.016697243574816605" rpy="-1.5713792747034883 -0.8802436768186448 -0.00028427419944393884"/>
+      <geometry>
+        <mesh filename="assets/base_so101_v2.stl"/>
+      </geometry>
+    </visual>
+    <visual>
+      <origin xyz="0.026336371867769003 -8.97980710907619e-09 0.04370011763883426" rpy="-5.710220000000001e-16 -1.9288659999999967e-16 1.225816e-15"/>
+      <geometry>
+        <mesh filename="assets/sts3215_03a_v1.stl"/>
+      </geometry>
+    </visual>
+    <visual>
+      <origin xyz="-0.028587660040692832 -0.00019944100402413778 0.04741993162573727" rpy="-1.5707963267948966 -5.390488420337477e-05 -3.853999915606422e-17"/>
+      <geometry>
+        <mesh filename="assets/waveshare_mounting_plate_so101_v2.stl"/>
+      </geometry>
+    </visual>
+  </link>
+  <joint name="base_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="base"/>
+    <origin xyz="0.0 0.0 0.0" rpy="0.0 -0.0 0.0"/>
+  </joint>
+  <link name="shoulder">
+    <visual>
+      <origin xyz="-0.03039920000323711 0.00042212336116574406 -0.041701071867769" rpy="1.5707963267948966 1.5707963267948966 0.0"/>
+      <geometry>
+        <mesh filename="assets/sts3215_03a_v1.stl"/>
+      </geometry>
+    </visual>
+    <visual>
+      <origin xyz="-0.03039920000323711 0.00042212336116574406 -0.041701071867769" rpy="1.5707963267948966 1.5707963267948966 0.0"/>
+      <geometry>
+        <mesh filename="assets/sts3215_03a_v1.stl"/>
+      </geometry>
+    </visual>
+    <visual>
+      <origin xyz="-0.032873374602624975 -0.0003012699033251067 -0.023911799732759073" rpy="2.573069769356079 -1.5608924468983574 -1.0098192710767178"/>
+      <geometry>
+        <mesh filename="assets/motor_holder_so101_base_v1.stl"/>
+      </geometry>
+    </visual>
+    <visual>
+      <origin xyz="-0.032873374602624975 -0.0003012699033251067 -0.023911799732759073" rpy="2.573069769356079 -1.5608924468983574 -1.0098192710767178"/>
+      <geometry>
+        <mesh filename="assets/motor_holder_so101_base_v1.stl"/>
+      </geometry>
+    </visual>
+    <visual>
+      <origin xyz="-0.026896039297600538 -2.0019159256091183e-05 0.006692065211560752" rpy="0.3581426806572171 0.006914307555918541 1.5697346442470554"/>
+      <geometry>
+        <mesh filename="assets/rotation_pitch_so101_v1.stl"/>
+      </geometry>
+    </visual>
+    <visual>
+      <origin xyz="-0.026896039297600538 -2.0019159256091183e-05 0.006692065211560752" rpy="0.3581426806572171 0.006914307555918541 1.5697346442470554"/>
+      <geometry>
+        <mesh filename="assets/rotation_pitch_so101_v1.stl"/>
+      </geometry>
+    </visual>
+  </link>
+  <joint name="shoulder_pan" type="revolute">
+    <parent link="base"/>
+    <child link="shoulder"/>
+    <origin xyz="0.0388353 -8.97657e-09 0.0624" rpy="3.1415926535897922 -7.12333999999999e-16 -3.141592653589791"/>
+    <axis xyz="0.0 0.0 1.0"/>
+    <limit lower="-1.9198621771937616" upper="1.9198621771937634" effort="10" velocity="3"/>
+  </joint>
+  <link name="upper_arm">
+    <visual>
+      <origin xyz="-0.1125699999967629 -0.015501071867769002 0.018699882361165744" rpy="-3.1415926535897922 4.510279208097219e-16 -1.5707963267948966"/>
+      <geometry>
+        <mesh filename="assets/sts3215_03a_v1.stl"/>
+      </geometry>
+    </visual>
+    <visual>
+      <origin xyz="-0.1125699999967629 -0.015501071867769002 0.018699882361165744" rpy="-3.1415926535897922 4.510279208097219e-16 -1.5707963267948966"/>
+      <geometry>
+        <mesh filename="assets/sts3215_03a_v1.stl"/>
+      </geometry>
+    </visual>
+    <visual>
+      <origin xyz="-0.060948951445727775 0.000648050228201049 0.018323217068292923" rpy="-1.5739182936206608 -0.0015014673356169253 -1.5861140524569577"/>
+      <geometry>
+        <mesh filename="assets/upper_arm_so101_v1.stl"/>
+      </geometry>
+    </visual>
+    <visual>
+      <origin xyz="-0.060948951445727775 0.000648050228201049 0.018323217068292923" rpy="-1.5739182936206608 -0.0015014673356169253 -1.5861140524569577"/>
+      <geometry>
+        <mesh filename="assets/upper_arm_so101_v1.stl"/>
+      </geometry>
+    </visual>
+  </link>
+  <joint name="shoulder_lift" type="revolute">
+    <parent link="shoulder"/>
+    <child link="upper_arm"/>
+    <origin xyz="-0.0303992 -0.0182778 -0.0542" rpy="-1.5707963267948966 -1.5707963267948966 0.0"/>
+    <axis xyz="0.0 0.0 1.0"/>
+    <limit lower="-1.7453292519943224" upper="1.7453292519943366" effort="10" velocity="3"/>
+  </joint>
+  <link name="lower_arm">
+    <visual>
+      <origin xyz="-0.05235923034033208 -0.0007125590079915048 0.017414185191079384" rpy="-1.610803000833919 -0.000556526282170461 -1.5445099050277258"/>
+      <geometry>
+        <mesh filename="assets/under_arm_so101_v1.stl"/>
+      </geometry>
+    </visual>
+    <visual>
+      <origin xyz="-0.05235923034033208 -0.0007125590079915048 0.017414185191079384" rpy="-1.610803000833919 -0.000556526282170461 -1.5445099050277258"/>
+      <geometry>
+        <mesh filename="assets/under_arm_so101_v1.stl"/>
+      </geometry>
+    </visual>
+    <visual>
+      <origin xyz="-0.10462388243873977 0.0027438434354890087 0.018091057513380214" rpy="3.1348428233447754 0.00648240373722853 -0.00768979282428665"/>
+      <geometry>
+        <mesh filename="assets/motor_holder_so101_wrist_v1.stl"/>
+      </geometry>
+    </visual>
+    <visual>
+      <origin xyz="-0.10462388243873977 0.0027438434354890087 0.018091057513380214" rpy="3.1348428233447754 0.00648240373722853 -0.00768979282428665"/>
+      <geometry>
+        <mesh filename="assets/motor_holder_so101_wrist_v1.stl"/>
+      </geometry>
+    </visual>
+    <visual>
+      <origin xyz="-0.122401071867769 0.00519999999676289 0.018699882361165744" rpy="-3.1415926535897927 1.443290000000001e-15 3.14159265358979"/>
+      <geometry>
+        <mesh filename="assets/sts3215_03a_v1.stl"/>
+      </geometry>
+    </visual>
+    <visual>
+      <origin xyz="-0.122401071867769 0.00519999999676289 0.018699882361165744" rpy="-3.1415926535897927 1.443290000000001e-15 3.14159265358979"/>
+      <geometry>
+        <mesh filename="assets/sts3215_03a_v1.stl"/>
+      </geometry>
+    </visual>
+  </link>
+  <joint name="elbow_flex" type="revolute">
+    <parent link="upper_arm"/>
+    <child link="lower_arm"/>
+    <origin xyz="-0.11257 -0.028 1.73763e-16" rpy="-1.2115054722976863e-16 4.816272501898581e-17 1.5707963267948966"/>
+    <axis xyz="0.0 0.0 1.0"/>
+    <limit lower="-1.69" upper="1.69" effort="10" velocity="3"/>
+  </joint>
+  <link name="wrist">
+    <visual>
+      <origin xyz="-1.570359135436715e-12 -0.04240119241899571 0.030599796465630155" rpy="1.5707963267948966 1.5707963267948966 0.0"/>
+      <geometry>
+        <mesh filename="assets/sts3215_03a_no_horn_v1.stl"/>
+      </geometry>
+    </visual>
+    <visual>
+      <origin xyz="-1.570359135436715e-12 -0.04240119241899571 0.030599796465630155" rpy="1.5707963267948966 1.5707963267948966 0.0"/>
+      <geometry>
+        <mesh filename="assets/sts3215_03a_no_horn_v1.stl"/>
+      </geometry>
+    </visual>
+    <visual>
+      <origin xyz="-0.00015926197887756622 -0.02900365929164369 0.022490909944497837" rpy="-2.2628837403120126 0.011731959944887712 -0.016991707857770585"/>
+      <geometry>
+        <mesh filename="assets/wrist_roll_pitch_so101_v2.stl"/>
+      </geometry>
+    </visual>
+    <visual>
+      <origin xyz="-0.00015926197887756622 -0.02900365929164369 0.022490909944497837" rpy="-2.2628837403120126 0.011731959944887712 -0.016991707857770585"/>
+      <geometry>
+        <mesh filename="assets/wrist_roll_pitch_so101_v2.stl"/>
+      </geometry>
+    </visual>
+  </link>
+  <joint name="wrist_flex" type="revolute">
+    <parent link="lower_arm"/>
+    <child link="wrist"/>
+    <origin xyz="-0.1349 0.0052 3.62355e-17" rpy="2.418353940775583e-15 2.9332052999051075e-16 -1.5707963267948966"/>
+    <axis xyz="0.0 0.0 1.0"/>
+    <limit lower="-1.6580628494556928" upper="1.6580627293335335" effort="10" velocity="3"/>
+  </joint>
+  <link name="gripper">
+    <visual>
+      <origin xyz="0.007701071867769004 0.00010011763883425594 -0.023399999996762892" rpy="-1.5707963267948966 1.1470809933998671e-14 6.775198095903447e-15"/>
+      <geometry>
+        <mesh filename="assets/sts3215_03a_v1.stl"/>
+      </geometry>
+    </visual>
+    <visual>
+      <origin xyz="0.007701071867769004 0.00010011763883425594 -0.023399999996762892" rpy="-1.5707963267948966 1.1470809933998671e-14 6.775198095903447e-15"/>
+      <geometry>
+        <mesh filename="assets/sts3215_03a_v1.stl"/>
+      </geometry>
+    </visual>
+    <visual>
+      <origin xyz="-0.009845917206936365 0.000184461995706913 -0.02819645732270609" rpy="2.782951410311344 0.050490475447936806 -1.4375289775510605"/>
+      <geometry>
+        <mesh filename="assets/wrist_roll_follower_so101_v1.stl"/>
+      </geometry>
+    </visual>
+    <visual>
+      <origin xyz="-0.009845917206936365 0.000184461995706913 -0.02819645732270609" rpy="2.782951410311344 0.050490475447936806 -1.4375289775510605"/>
+      <geometry>
+        <mesh filename="assets/wrist_roll_follower_so101_v1.stl"/>
+      </geometry>
+    </visual>
+  </link>
+  <joint name="wrist_roll" type="revolute">
+    <parent link="wrist"/>
+    <child link="gripper"/>
+    <origin xyz="5.55112e-17 -0.0611 0.0181" rpy="1.5707963267948966 0.04867951485346193 3.141592653589793"/>
+    <axis xyz="0.0 0.0 1.0"/>
+    <limit lower="-2.7438472969992493" upper="2.841206309382605" effort="10" velocity="3"/>
+  </joint>
+  <link name="moving_jaw_so101_v1">
+    <visual>
+      <origin xyz="-0.001412996277903221 -0.02470840832429773 0.018875361158411295" rpy="1.5692677476445909 0.00033852911728368847 -0.07520946722437163"/>
+      <geometry>
+        <mesh filename="assets/moving_jaw_so101_v1.stl"/>
+      </geometry>
+    </visual>
+    <visual>
+      <origin xyz="-0.001412996277903221 -0.02470840832429773 0.018875361158411295" rpy="1.5692677476445909 0.00033852911728368847 -0.07520946722437163"/>
+      <geometry>
+        <mesh filename="assets/moving_jaw_so101_v1.stl"/>
+      </geometry>
+    </visual>
+  </link>
+  <joint name="gripper" type="revolute">
+    <parent link="gripper"/>
+    <child link="moving_jaw_so101_v1"/>
+    <origin xyz="0.0202 0.0188 -0.0234" rpy="1.5707963267948966 -5.242827464584566e-08 0.0"/>
+    <axis xyz="0.0 0.0 1.0"/>
+    <limit lower="-0.17453297762778586" upper="1.7453291995659765" effort="10" velocity="3"/>
+  </joint>
+</robot>

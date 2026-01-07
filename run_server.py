@@ -1,0 +1,96 @@
+#!/usr/bin/env python3
+"""
+Run script for teleoperation server
+"""
+import argparse
+import sys
+import os
+
+# Add server directory to path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'server'))
+
+try:
+    from teleop_server import run_server, TeleoperationServer
+except ImportError:
+    from server.teleop_server import run_server, TeleoperationServer
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Teleoperation Server")
+    parser.add_argument("--host", default="0.0.0.0", help="Host to bind to")
+    parser.add_argument("--port", type=int, default=8000, help="Port to listen on")
+    parser.add_argument("--backend", default="mock",
+                       choices=["mock", "isaac", "mujoco", "soarm", "so101", "mock_vr", "so101_dual"], help="Backend type")
+    parser.add_argument("--mujoco-xml", help="Path to MuJoCo XML file")
+    parser.add_argument("--mujoco-ee", help="Name of the end-effector site")
+    parser.add_argument("--mujoco-camera", help="MuJoCo camera name (e.g. world_cam)")
+    parser.add_argument("--soarm-port", help="USB port for SO-ARM robot (e.g. /dev/ttyUSB0)")
+    parser.add_argument("--left-port", help="USB port for Left SO-ARM robot (dual mode)")
+    parser.add_argument("--right-port", help="USB port for Right SO-ARM robot (dual mode)")
+    parser.add_argument("--isaac-host", help="Isaac Sim host address")
+    parser.add_argument("--isaac-port", type=int, help="Isaac Sim port")
+    parser.add_argument("--ssl-key", help="Path to SSL key file (for HTTPS/WebXR)")
+    parser.add_argument("--ssl-cert", help="Path to SSL cert file (for HTTPS/WebXR)")
+    parser.add_argument("--no-server", action="store_true",
+                       help="Initialize only, don't run server")
+
+    args = parser.parse_args()
+
+    # Set environment variables for MuJoCo backend
+    if args.mujoco_xml:
+        os.environ["TELEOP_MUJOCO_XML"] = os.path.abspath(args.mujoco_xml)
+    if args.mujoco_ee:
+        os.environ["TELEOP_MUJOCO_EE_SITE"] = args.mujoco_ee
+    if args.mujoco_camera:
+        os.environ["TELEOP_MUJOCO_CAMERA"] = args.mujoco_camera
+
+    # Set environment variables for SO-ARM backend
+    if args.soarm_port:
+        os.environ["TELEOP_SOARM_PORT"] = args.soarm_port
+    if args.left_port:
+        os.environ["TELEOP_LEFT_PORT"] = args.left_port
+    if args.right_port:
+        os.environ["TELEOP_RIGHT_PORT"] = args.right_port
+
+    # Set environment variables for Isaac backend
+    if args.isaac_host:
+        os.environ["TELEOP_ISAAC_HOST"] = args.isaac_host
+    if args.isaac_port:
+        os.environ["TELEOP_ISAAC_PORT"] = str(args.isaac_port)
+
+    if args.no_server:
+        # Just initialize and test
+        backend_config = {}
+        if args.backend in ['soarm', 'so101'] and args.soarm_port:
+            backend_config['port'] = args.soarm_port
+        elif args.backend == 'so101_dual':
+            if args.left_port:
+                backend_config['left_port'] = args.left_port
+            if args.right_port:
+                backend_config['right_port'] = args.right_port
+        elif args.backend == 'isaac':
+            if args.isaac_host:
+                backend_config['host'] = args.isaac_host
+            if args.isaac_port:
+                backend_config['port'] = args.isaac_port
+
+        server = TeleoperationServer(backend_type=args.backend, backend_config=backend_config)
+        server.initialize()
+        print(f"Server initialized with {args.backend} backend")
+        print("Press Ctrl+C to exit...")
+        try:
+            while True:
+                import time
+                time.sleep(1)
+        except KeyboardInterrupt:
+            server.shutdown()
+    else:
+        # Run the full server
+        print(f"Starting teleoperation server on {args.host}:{args.port}")
+        print(f"Using backend: {args.backend}")
+        run_server(host=args.host, port=args.port, backend_type=args.backend, 
+                  ssl_keyfile=args.ssl_key, ssl_certfile=args.ssl_cert)
+
+
+if __name__ == "__main__":
+    main()

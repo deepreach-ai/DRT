@@ -1,0 +1,492 @@
+<?xml version="1.0" encoding="utf-8"?>
+ <!-- This URDF was automatically created by SolidWorks to URDF Exporter! Originally created by Stephen Brawner (brawner@gmail.com) 
+      Commit Version: 1.6.0-4-g7f85cfe  Build Version: 1.6.7995.38578
+      For more information, please see http://wiki.ros.org/sw_urdf_exporter -->
+ <robot name="urdf20251126">
+   <link name="base_link">
+     <inertial>
+       <origin xyz="-0.0395726955586593 -0.000490933424187967 -0.808802318381516" rpy="0 0 0" />
+       <mass value="22.0129076320108" />
+       <inertia ixx="0.788487643897501" ixy="5.2148828473881E-05" ixz="0.00188458585705073" iyy="0.760376196080064" iyz="-3.79263008735117E-05" izz="0.258782982494664" />
+     </inertial>
+    <visual name="base_link">
+       <origin xyz="0 0 0" rpy="0 0 0" />
+       <geometry>
+         <mesh filename="package://urdf20251126/meshes/base_link.STL" />
+       </geometry>
+       <material name="">
+         <color rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" />
+       </material>
+     </visual>
+    <collision name="base_link">
+       <origin xyz="0 0 0" rpy="0 0 0" />
+       <geometry>
+         <mesh filename="package://urdf20251126/meshes/sdf_offset/base_link_sdf.obj" />
+       </geometry>
+     </collision>
+   </link>
+   <link name="Link_L1">
+     <inertial>
+       <origin xyz="-0.00622096860857377 -0.000551708897127759 0.0701255738766555" rpy="0 0 0" />
+       <mass value="3.24688626577405" />
+       <inertia ixx="0.00448926025495758" ixy="-2.2719531695474E-06" ixz="-2.32749336604218E-05" iyy="0.00357486768526562" iyz="4.75877953677058E-08" izz="0.00469426097973593" />
+     </inertial>
+    <visual name="Link_L1">
+       <origin xyz="0 0 0" rpy="0 0 0" />
+       <geometry>
+         <mesh filename="package://urdf20251126/meshes/Link_L1.STL" />
+       </geometry>
+       <material name="">
+         <color rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" />
+       </material>
+     </visual>
+    <collision name="Link_L1">
+       <origin xyz="0 0 0" rpy="0 0 0" />
+       <geometry>
+         <mesh filename="package://urdf20251126/meshes/sdf_offset/Link_L1_sdf.obj" />
+       </geometry>
+     </collision>
+   </link>
+   <joint name="LJ1" type="revolute">
+     <origin xyz="-0.000523299512978012 0.0953052927236054 -0.00147494305338181" rpy="-1.57037423820711 0 -0.00080319388884296" />
+     <parent link="base_link" />
+     <child link="Link_L1" />
+     <axis xyz="0 0.00257547313323841 -0.99999668346357" />
+     <limit lower="-2.96" upper="2.96" effort="0" velocity="5.0" />
+   </joint>
+   <link name="Link_L2">
+     <inertial>
+       <origin xyz="0.0702778492040597 -0.000847923281316096 -0.0197363162889606" rpy="0 0 0" />
+       <mass value="0.180220326947674" />
+       <inertia ixx="0.000163891525279795" ixy="3.04593422412682E-07" ixz="4.74390267618759E-05" iyy="0.000265484929884454" iyz="5.65887631509253E-07" izz="0.000271720748462501" />
+     </inertial>
+    <visual name="Link_L2">
+       <origin xyz="0 0 0" rpy="0 0 0" />
+       <geometry>
+         <mesh filename="package://urdf20251126/meshes/Link_L2.STL" />
+       </geometry>
+       <material name="">
+         <color rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" />
+       </material>
+     </visual>
+    <collision name="Link_L2">
+       <origin xyz="0 0 0" rpy="0 0 0" />
+       <geometry>
+         <mesh filename="package://urdf20251126/meshes/sdf_offset/Link_L2_sdf.obj" />
+       </geometry>
+     </collision>
+   </link>
+   <joint name="LJ2" type="revolute">
+     <origin xyz="0.0284999999999999 -0.000320646405089178 0.124499587091213" rpy="-0.734487126632078 -1.56695351255895 -2.40710919964933" />
+     <parent link="Link_L1" />
+     <child link="Link_L2" />
+     <axis xyz="0 0 -1" />
+     <limit lower="-1.81" upper="1.81" effort="0" velocity="5.0" />
+   </joint>
+   <link name="Link_L3">
+     <inertial>
+       <origin xyz="-0.0169478766376025 -0.00894375786790924 0.0736061165005361" rpy="0 0 0" />
+       <mass value="0.944101892000319" />
+       <inertia ixx="0.000811225715143948" ixy="1.67427743837267E-06" ixz="5.26026555280172E-05" iyy="0.000965364589869333" iyz="-1.36356615143969E-05" izz="0.000926370435940605" />
+     </inertial>
+    <visual name="Link_L3">
+       <origin xyz="0 0 0" rpy="0 0 0" />
+       <geometry>
+         <mesh filename="package://urdf20251126/meshes/Link_L3.STL" />
+       </geometry>
+       <material name="">
+         <color rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" />
+       </material>
+     </visual>
+    <collision name="Link_L3">
+       <origin xyz="0 0 0" rpy="0 0 0" />
+       <geometry>
+         <mesh filename="package://urdf20251126/meshes/sdf_offset/Link_L3_sdf.obj" />
+       </geometry>
+     </collision>
+   </link>
+   <joint name="LJ3" type="revolute">
+     <origin xyz="0.12858076056284 0 -0.0281333967569068" rpy="0 1.5679442814393 0" />
+     <parent link="Link_L2" />
+     <child link="Link_L3" />
+     <axis xyz="0 0 -1" />
+     <limit lower="-1.48" upper="3.14" effort="0" velocity="5.0" />
+   </joint>
+   <link name="Link_L4">
+     <inertial>
+       <origin xyz="0.0284274073608016 -0.0705882517762382 -0.0172897359918851" rpy="0 0 0" />
+       <mass value="0.134969510282772" />
+       <inertia ixx="0.000103702648877659" ixy="1.35275461314136E-05" ixz="3.09800521393426E-06" iyy="8.35009684793085E-05" iyz="-9.57544156333126E-06" izz="8.68120958057744E-05" />
+     </inertial>
+    <visual name="Link_L4">
+       <origin xyz="0 0 0" rpy="0 0 0" />
+       <geometry>
+         <mesh filename="package://urdf20251126/meshes/Link_L4.STL" />
+       </geometry>
+       <material name="">
+         <color rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" />
+       </material>
+     </visual>
+    <collision name="Link_L4">
+       <origin xyz="0 0 0" rpy="0 0 0" />
+       <geometry>
+         <mesh filename="package://urdf20251126/meshes/sdf_offset/Link_L4_sdf.obj" />
+       </geometry>
+     </collision>
+   </link>
+   <joint name="LJ4" type="revolute">
+     <origin xyz="-0.0394395225535319 0.013809954439718 0.151105847162617" rpy="-1.5707963267949 0 0" />
+     <parent link="Link_L3" />
+     <child link="Link_L4" />
+     <axis xyz="0 0 -1" />
+     <limit lower="0" upper="2.61" effort="0" velocity="5.0" />
+   </joint>
+   <link name="Link_L5">
+     <inertial>
+       <origin xyz="-0.000224346582011301 -0.000757515781277585 -0.0624849918842907" rpy="0 0 0" />
+       <mass value="0.578376916777973" />
+       <inertia ixx="0.000437999253405115" ixy="-3.99995148344188E-09" ixz="-4.17302167877557E-08" iyy="0.000374540434696389" iyz="4.37239990946971E-07" izz="0.000312313081966596" />
+     </inertial>
+    <visual name="Link_L5">
+       <origin xyz="0 0 0" rpy="0 0 0" />
+       <geometry>
+         <mesh filename="package://urdf20251126/meshes/Link_L5.STL" />
+       </geometry>
+       <material name="">
+         <color rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" />
+       </material>
+     </visual>
+    <collision name="Link_L5">
+       <origin xyz="0 0 0" rpy="0 0 0" />
+       <geometry>
+         <mesh filename="package://urdf20251126/meshes/sdf_offset/Link_L5_sdf.obj" />
+       </geometry>
+     </collision>
+   </link>
+   <joint name="LJ5" type="revolute">
+     <origin xyz="0.0298875953138846 -0.10950001926102 -0.02101726764403" rpy="-1.56779876222666 0 0.000803193888832527" />
+     <parent link="Link_L4" />
+     <child link="Link_L5" />
+     <axis xyz="0 0 1" />
+     <limit lower="-2.79" upper="2.79" effort="0" velocity="5.0" />
+   </joint>
+   <link name="Link_L6">
+     <inertial>
+       <origin xyz="0.000662449221940142 -0.000550406839236128 0.0361352833772085" rpy="0 0 0" />
+       <mass value="0.171828875921239" />
+       <inertia ixx="8.05566694711738E-05" ixy="6.43323162845359E-10" ixz="1.36931448270043E-06" iyy="6.22788007038775E-05" iyz="-8.69273532803977E-10" izz="5.97407437374212E-05" />
+     </inertial>
+    <visual name="Link_L6">
+       <origin xyz="0 0 0" rpy="0 0 0" />
+       <geometry>
+         <mesh filename="package://urdf20251126/meshes/Link_L6.STL" />
+       </geometry>
+       <material name="">
+         <color rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" />
+       </material>
+     </visual>
+    <collision name="Link_L6">
+       <origin xyz="0 0 0" rpy="0 0 0" />
+       <geometry>
+         <mesh filename="package://urdf20251126/meshes/sdf_offset/Link_L6_sdf.obj" />
+       </geometry>
+     </collision>
+   </link>
+   <joint name="LJ6" type="revolute">
+     <origin xyz="0.042001635817149 -0.000724630037761853 -0.16648505966172" rpy="-1.5707963267949 0 1.5707963267949" />
+     <parent link="Link_L5" />
+     <child link="Link_L6" />
+     <axis xyz="0 0 1" />
+     <limit lower="-1.39" upper="1.39" effort="0" velocity="5.0" />
+   </joint>
+   <link name="Link_L7">
+     <inertial>
+       <origin xyz="0.00283768237231645 0.105216203472544 0.0401787874475281" rpy="0 0 0" />
+       <mass value="0.354175566621878" />
+       <inertia ixx="0.000216957048203233" ixy="3.89674309210907E-06" ixz="-4.87146243597934E-06" iyy="0.00013524087296399" iyz="-1.55322629278603E-05" izz="0.000141100848319185" />
+     </inertial>
+    <visual name="Link_L7">
+       <origin xyz="0 0 0" rpy="0 0 0" />
+       <geometry>
+         <mesh filename="package://urdf20251126/meshes/Link_L7.STL" />
+       </geometry>
+       <material name="">
+         <color rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" />
+       </material>
+     </visual>
+    <collision name="Link_L7">
+       <origin xyz="0 0 0" rpy="0 0 0" />
+       <geometry>
+         <mesh filename="package://urdf20251126/meshes/sdf_offset/Link_L7_sdf.obj" />
+       </geometry>
+     </collision>
+   </link>
+   <joint name="LJ7" type="revolute">
+     <origin xyz="-0.030999999999997 0 0.041999999999999" rpy="3.01406414246015 1.57079631189374 2.95157649965126" />
+     <parent link="Link_L6" />
+     <child link="Link_L7" />
+     <axis xyz="0 0 1" />
+     <limit lower="-0.69" upper="0.69" effort="0" velocity="5.0" />
+   </joint>
+   <link name="Link_L8">
+     <inertial>
+       <origin xyz="0.0658327997364676 -0.0167486810232525 0.00405704005705805" rpy="0 0 0" />
+       <mass value="0.103465559541858" />
+       <inertia ixx="1.20687682740846E-05" ixy="1.64000296963822E-06" ixz="8.49147736848476E-08" iyy="3.03401882912199E-05" iyz="-1.46257014335449E-08" izz="3.40694216131428E-05" />
+     </inertial>
+    <visual name="Link_L8">
+       <origin xyz="0 0 0" rpy="0 0 0" />
+       <geometry>
+         <mesh filename="package://urdf20251126/meshes/Link_L8.STL" />
+       </geometry>
+       <material name="">
+         <color rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" />
+       </material>
+     </visual>
+    <collision name="Link_L8">
+       <origin xyz="0 0 0" rpy="0 0 0" />
+       <geometry>
+         <mesh filename="package://urdf20251126/meshes/sdf_offset/Link_L8_sdf.obj" />
+       </geometry>
+     </collision>
+   </link>
+   <joint name="LJ8" type="revolute">
+     <origin xyz="-0.00549999999999989 0.0971332760309079 0.0104068201216476" rpy="1.5707963267949 0 1.56874748814143" />
+     <parent link="Link_L7" />
+     <child link="Link_L8" />
+     <axis xyz="-0.00204883722005003 0 -0.99999790113082" />
+     <limit lower="0" upper="0" effort="0" velocity="5.0" />
+   </joint>
+   <link name="Link_R1">
+     <inertial>
+       <origin xyz="-0.00616219687904292 -0.000141488074097751 -0.0694269573729014" rpy="0 0 0" />
+       <mass value="3.28307302760882" />
+       <inertia ixx="0.00449648787808696" ixy="2.33189192958491E-06" ixz="2.32688011320957E-05" iyy="0.00358048650747306" iyz="-7.97382955038679E-06" izz="0.00470733456558145" />
+     </inertial>
+    <visual name="Link_R1">
+       <origin xyz="0 0 0" rpy="0 0 0" />
+       <geometry>
+         <mesh filename="package://urdf20251126/meshes/Link_R1.STL" />
+       </geometry>
+       <material name="">
+         <color rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" />
+       </material>
+     </visual>
+    <collision name="Link_R1">
+       <origin xyz="0 0 0" rpy="0 0 0" />
+       <geometry>
+         <mesh filename="package://urdf20251126/meshes/sdf_offset/Link_R1_sdf.obj" />
+       </geometry>
+     </collision>
+   </link>
+   <joint name="RJ1" type="revolute">
+     <origin xyz="0 -0.0955000000000005 0" rpy="-1.5707963267949 0 0" />
+     <parent link="base_link" />
+     <child link="Link_R1" />
+     <axis xyz="0 0 1" />
+     <limit lower="-2.96" upper="2.96" effort="0" velocity="5.0" />
+   </joint>
+   <link name="Link_R2">
+     <inertial>
+       <origin xyz="-0.0628156213151811 3.15860613274155E-05 -0.0191651892962703" rpy="0 0 0" />
+       <mass value="0.199698024204879" />
+       <inertia ixx="0.000163754968712709" ixy="3.0620881642617E-07" ixz="-4.77457979345335E-05" iyy="0.000265315670352152" iyz="-3.46551631692825E-07" izz="0.000276694586610276" />
+     </inertial>
+    <visual name="Link_R2">
+       <origin xyz="0 0 0" rpy="0 0 0" />
+       <geometry>
+         <mesh filename="package://urdf20251126/meshes/Link_R2.STL" />
+       </geometry>
+       <material name="">
+         <color rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" />
+       </material>
+     </visual>
+    <collision name="Link_R2">
+       <origin xyz="0 0 0" rpy="0 0 0" />
+       <geometry>
+         <mesh filename="package://urdf20251126/meshes/sdf_offset/Link_R2_sdf.obj" />
+       </geometry>
+     </collision>
+   </link>
+   <joint name="RJ2" type="revolute">
+     <origin xyz="0.0284999999999986 0 -0.124499999999997" rpy="-1.60027367316405 -1.57079630572147 -1.54119308228771" />
+     <parent link="Link_R1" />
+     <child link="Link_R2" />
+     <axis xyz="0 0 -1" />
+     <limit lower="-1.81" upper="1.81" effort="0" velocity="5.0" />
+   </joint>
+   <link name="Link_R3">
+     <inertial>
+       <origin xyz="-0.0129183041670598 -0.000527245651984934 -0.777996021971953" rpy="0 0 0" />
+       <mass value="1.08610746618923" />
+       <inertia ixx="0.00119021749994985" ixy="7.06055980002038E-06" ixz="-0.000139182680464227" iyy="0.00153095824355109" iyz="3.73440988867181E-05" izz="0.00116655547161225" />
+     </inertial>
+    <visual name="Link_R3">
+       <origin xyz="0 0 0" rpy="0 0 0" />
+       <geometry>
+         <mesh filename="package://urdf20251126/meshes/Link_R3.STL" />
+       </geometry>
+       <material name="">
+         <color rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" />
+       </material>
+     </visual>
+    <collision name="Link_R3">
+       <origin xyz="0 0 0" rpy="0 0 0" />
+       <geometry>
+         <mesh filename="package://urdf20251126/meshes/sdf_offset/Link_R3_sdf.obj" />
+       </geometry>
+     </collision>
+   </link>
+   <joint name="RJ3" type="revolute">
+     <origin xyz="0.568304074464099 -0.000716560353346996 -0.0288200914809485" rpy="-0.00149878247169826 1.5699931320041 0.00149878257998731" />
+     <parent link="Link_R2" />
+     <child link="Link_R3" />
+     <axis xyz="0.000803193802482629 -0.00299756007919128 0.99999518474505" />
+     <limit lower="-1.48" upper="3.14" effort="0" velocity="5.0" />
+   </joint>
+   <link name="Link_R4">
+     <inertial>
+       <origin xyz="0.0256862638025771 -0.0548685022052413 0.0146267983656275" rpy="0 0 0" />
+       <mass value="0.141136595421556" />
+       <inertia ixx="0.000110509414847405" ixy="2.44586238438545E-05" ixz="-6.19210910237137E-06" iyy="8.33430035429651E-05" iyz="1.91510482516803E-05" izz="0.000124912018368811" />
+     </inertial>
+    <visual name="Link_R4">
+       <origin xyz="0 0 0" rpy="0 0 0" />
+       <geometry>
+         <mesh filename="package://urdf20251126/meshes/Link_R4.STL" />
+       </geometry>
+       <material name="">
+         <color rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" />
+       </material>
+     </visual>
+    <collision name="Link_R4">
+       <origin xyz="0 0 0" rpy="0 0 0" />
+       <geometry>
+         <mesh filename="package://urdf20251126/meshes/sdf_offset/Link_R4_sdf.obj" />
+       </geometry>
+     </collision>
+   </link>
+   <joint name="RJ4" type="revolute">
+     <origin xyz="-0.0309965889705919 0.0242412833558991 -0.842210568951295" rpy="1.57379389233003 0.000803193888838036 0" />
+     <parent link="Link_R3" />
+     <child link="Link_R4" />
+     <axis xyz="0 0 1" />
+     <limit lower="-2.61" upper="0" effort="0" velocity="5.0" />
+   </joint>
+   <link name="Link_R5">
+     <inertial>
+       <origin xyz="0.00111011053064769 -0.000126690812702557 -0.0561799531115378" rpy="0 0 0" />
+       <mass value="0.627666951795782" />
+       <inertia ixx="0.000482796123302516" ixy="-2.81546422968087E-08" ixz="1.39270960413248E-06" iyy="0.000394902283487047" iyz="-1.40365282622155E-07" izz="0.000352281245856579" />
+     </inertial>
+    <visual name="Link_R5">
+       <origin xyz="0 0 0" rpy="0 0 0" />
+       <geometry>
+         <mesh filename="package://urdf20251126/meshes/Link_R5.STL" />
+       </geometry>
+       <material name="">
+         <color rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" />
+       </material>
+     </visual>
+    <collision name="Link_R5">
+       <origin xyz="0 0 0" rpy="0 0 0" />
+       <geometry>
+         <mesh filename="package://urdf20251126/meshes/sdf_offset/Link_R5_sdf.obj" />
+       </geometry>
+     </collision>
+   </link>
+   <joint name="RJ5" type="revolute">
+     <origin xyz="0.0299999999999959 -0.1095 0.0210000000000064" rpy="1.5707963267949 0 -3.14159265358979" />
+     <parent link="Link_R4" />
+     <child link="Link_R5" />
+     <axis xyz="0 0 1" />
+     <limit lower="-2.79" upper="2.79" effort="0" velocity="5.0" />
+   </joint>
+   <link name="Link_R6">
+     <inertial>
+       <origin xyz="-0.00068794251072235 -0.000150935391365681 0.0336514734530634" rpy="0 0 0" />
+       <mass value="0.169440433622254" />
+       <inertia ixx="8.03454243245386E-05" ixy="-3.24916395121271E-10" ixz="-1.30540179649036E-06" iyy="6.20575087869303E-05" iyz="8.87586020410935E-10" izz="5.93158249519476E-05" />
+     </inertial>
+    <visual name="Link_R6">
+       <origin xyz="0 0 0" rpy="0 0 0" />
+       <geometry>
+         <mesh filename="package://urdf20251126/meshes/Link_R6.STL" />
+       </geometry>
+       <material name="">
+         <color rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" />
+       </material>
+     </visual>
+    <collision name="Link_R6">
+       <origin xyz="0 0 0" rpy="0 0 0" />
+       <geometry>
+         <mesh filename="package://urdf20251126/meshes/sdf_offset/Link_R6_sdf.obj" />
+       </geometry>
+     </collision>
+   </link>
+   <joint name="RJ6" type="revolute">
+     <origin xyz="-0.0389999574169062 5.76322783243932E-05 -0.166" rpy="-1.5707963267949 0 -1.572274078059" />
+     <parent link="Link_R5" />
+     <child link="Link_R6" />
+     <axis xyz="0 0 1" />
+     <limit lower="-1.39" upper="1.39" effort="0" velocity="5.0" />
+   </joint>
+   <link name="Link_R7">
+     <inertial>
+       <origin xyz="0.00207326726520853 0.102940653192618 -0.0387616364061993" rpy="0 0 0" />
+       <mass value="0.310476336018042" />
+       <inertia ixx="0.000187925190373557" ixy="3.86479989670896E-06" ixz="4.84718693904632E-06" iyy="0.000119950206882825" iyz="1.32962136560891E-05" izz="0.000126584382871846" />
+     </inertial>
+    <visual name="Link_R7">
+       <origin xyz="0 0 0" rpy="0 0 0" />
+       <geometry>
+         <mesh filename="package://urdf20251126/meshes/Link_R7.STL" />
+       </geometry>
+       <material name="">
+         <color rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" />
+       </material>
+     </visual>
+    <collision name="Link_R7">
+       <origin xyz="0 0 0" rpy="0 0 0" />
+       <geometry>
+         <mesh filename="package://urdf20251126/meshes/sdf_offset/Link_R7_sdf.obj" />
+       </geometry>
+     </collision>
+   </link>
+   <joint name="RJ7" type="revolute">
+     <origin xyz="0.031 0 0.039" rpy="0 1.5708 0" />
+     <parent link="Link_R6" />
+     <child link="Link_R7" />
+     <axis xyz="0 0 -1" />
+     <limit lower="-0.69" upper="0.69" effort="0" velocity="5.0" />
+   </joint>
+   <link name="Link_R8">
+     <inertial>
+       <origin xyz="0.0681461967432087 0.0184540545222517 0.00337162344833551" rpy="0 0 0" />
+       <mass value="0.100352157191233" />
+       <inertia ixx="1.08437569412745E-05" ixy="-2.60464753285215E-06" ixz="4.0161570679672E-08" iyy="2.90818584068672E-05" iyz="1.32009740527302E-08" izz="3.15993673584638E-05" />
+     </inertial>
+    <visual name="Link_R8">
+       <origin xyz="0 0 0" rpy="0 0 0" />
+       <geometry>
+         <mesh filename="package://urdf20251126/meshes/Link_R8.STL" />
+       </geometry>
+       <material name="">
+         <color rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" />
+       </material>
+     </visual>
+    <collision name="Link_R8">
+       <origin xyz="0 0 0" rpy="0 0 0" />
+       <geometry>
+         <mesh filename="package://urdf20251126/meshes/sdf_offset/Link_R8_sdf.obj" />
+       </geometry>
+     </collision>
+   </link>
+   <joint name="RJ8" type="revolute">
+     <origin xyz="-0.0054228 0.097364 -0.0093106" rpy="1.5708 0 1.5708" />
+     <parent link="Link_R7" />
+     <child link="Link_R8" />
+     <axis xyz="0 0 -1" />
+     <limit lower="0" upper="0" effort="0" velocity="5.0" />
+   </joint>
+ </robot>

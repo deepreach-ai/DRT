@@ -1,0 +1,18 @@
+robot_name: "SO_101"
+dof: 6
+isaac_sim:
+  # 转换后的 USD 路径
+  usd_path: "assets/usd/so101.usd"
+  default_position: [0.0, 0.0, 0.0]
+  default_orientation: [1.0, 0.0, 0.0, 0.0]
+  prim_path: "/World/SO101"
+  # 根据 XML 结构，末端是 gripperframe
+  ee_frame: "gripperframe" 
+
+workspace_limits:
+  x: [-0.5, 0.5]
+  y: [-0.5, 0.5]
+  z: [0.0, 0.8]
+
+controller:
+  max_velocity: 0.5

@@ -1,0 +1,14 @@
+{
+  "name": "drt",
+  "version": "0.1.0",
+  "description": "DeepReach.ai Teleoperation Platform",
+  "scripts": {
+    "start": "python server/teleop_server.py",
+    "test": "pytest"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-code": "^2.1.31"
+  },
+  "author": "Teleop Team",
+  "license": "Apache-2.0"
+}

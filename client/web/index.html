@@ -1,0 +1,488 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DRT Console</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b1220;
+        --surface: #111a2e;
+        --border: #22304f;
+        --text: #e6eef9;
+        --muted: #a9b7d0;
+        --accent: #4f8cff;
+        --danger: #ff4d4f;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+        background: var(--bg);
+        color: var(--text);
+      }
+      .topbar {
+        height: 56px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 16px;
+        border-bottom: 1px solid var(--border);
+        background: rgba(17, 26, 46, 0.85);
+        backdrop-filter: blur(10px);
+      }
+      .title { font-weight: 700; }
+      .pill {
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        border: 1px solid var(--border);
+        color: var(--muted);
+      }
+      .pill.ok { color: #a6f4c5; border-color: rgba(110, 255, 170, 0.2); }
+      .pill.bad { color: #ffb4b4; border-color: rgba(255, 77, 79, 0.25); }
+      .pill.warn { color: #ffd29b; border-color: rgba(255, 208, 120, 0.25); }
+      .layout {
+        display: grid;
+        grid-template-columns: 480px 1fr;
+        gap: 16px;
+        padding: 16px;
+      }
+      @media (max-width: 900px) {
+        .layout { grid-template-columns: 1fr; }
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 12px;
+      }
+      .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+      label { font-size: 12px; color: var(--muted); }
+      input {
+        width: 100%;
+        padding: 10px;
+        background: rgba(0,0,0,0.25);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        outline: none;
+      }
+      button {
+        padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        background: rgba(79, 140, 255, 0.16);
+        color: var(--text);
+        cursor: pointer;
+      }
+      button:hover { background: rgba(79, 140, 255, 0.22); }
+      button.primary { border-color: rgba(79, 140, 255, 0.6); background: rgba(79, 140, 255, 0.22); }
+      button.danger { border-color: rgba(255, 77, 79, 0.6); background: rgba(255, 77, 79, 0.18); }
+      button:disabled { opacity: 0.5; cursor: not-allowed; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+      .hidden { display: none !important; }
+      .two {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+      .video {
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        background: rgba(0,0,0,0.25);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+      .video img { width: 100%; height: 100%; object-fit: cover; display: block; }
+      canvas { width: 100%; height: 260px; border-radius: 12px; border: 1px solid var(--border); background: rgba(0,0,0,0.22); }
+      .log {
+        height: 220px;
+        overflow: auto;
+        padding: 10px;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        background: rgba(0,0,0,0.22);
+        white-space: pre-wrap;
+      }
+      .kv { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+      .kv div { padding: 8px; border: 1px solid var(--border); border-radius: 10px; background: rgba(0,0,0,0.18); }
+      .kv b { display: block; font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+    </style>
+  </head>
+  <body>
+    <div class="topbar">
+      <div class="title">DRT Console</div>
+      <div id="connPill" class="pill warn">Disconnected</div>
+      <div class="row">
+        <button id="disconnectBtn" class="primary" disabled>Disconnect</button>
+      </div>
+    </div>
+
+    <div class="layout">
+      <div>
+        <div id="loginCard" class="card">
+          <div class="row" style="justify-content: space-between; margin-bottom: 8px;">
+            <div style="font-weight: 700;">Login</div>
+            <div class="pill">Simple Auth</div>
+          </div>
+          <div class="two">
+            <div>
+              <label>Username</label>
+              <input id="username" value="operator" />
+            </div>
+            <div>
+              <label>Password</label>
+              <input id="password" type="password" value="operator" />
+            </div>
+          </div>
+          <div style="height: 10px;"></div>
+          <div>
+            <label>Server Base URL (optional)</label>
+            <input id="baseUrl" placeholder="Leave empty if you opened this page from the server" />
+          </div>
+          <div style="height: 10px;"></div>
+          <div class="row">
+            <button id="loginBtn" class="primary">Login</button>
+            <div id="loginMsg" class="pill" style="flex: 1;">Waiting…</div>
+          </div>
+        </div>
+
+        <div id="controlsCard" class="card hidden" style="margin-top: 16px;">
+          <div class="row" style="justify-content: space-between; margin-bottom: 8px;">
+            <div style="font-weight: 700;">Controls</div>
+            <div class="pill">WASD / Arrows</div>
+          </div>
+          <div class="two">
+            <div>
+              <label>Speed (m per tick)</label>
+              <input id="linScale" type="number" min="0" step="0.005" value="0.02" />
+            </div>
+            <div>
+              <label>Yaw (rad per tick)</label>
+              <input id="yawScale" type="number" min="0" step="0.01" value="0.08" />
+            </div>
+          </div>
+          <div style="height: 10px;"></div>
+          <div class="row">
+            <button id="stopBtn">Stop</button>
+            <button id="estopBtn" class="danger">E-Stop</button>
+            <div class="pill mono" id="keysPill" style="flex: 1;">keys: -</div>
+          </div>
+          <div style="height: 10px;"></div>
+          <div class="row" style="gap: 8px;">
+            <button data-cmd="forward">Forward</button>
+            <button data-cmd="back">Back</button>
+            <button data-cmd="left">Left</button>
+            <button data-cmd="right">Right</button>
+            <button data-cmd="up">Up</button>
+            <button data-cmd="down">Down</button>
+            <button data-cmd="yawLeft">Yaw-</button>
+            <button data-cmd="yawRight">Yaw+</button>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="card">
+          <div class="row" style="justify-content: space-between; margin-bottom: 8px;">
+            <div style="font-weight: 700;">Video</div>
+            <div class="pill mono" id="videoPill">/api/v1/video/mjpeg</div>
+          </div>
+          <div class="video">
+            <img id="videoImg" alt="video" />
+          </div>
+          <div style="height: 12px;"></div>
+          <div class="row" style="justify-content: space-between; margin-bottom: 8px;">
+            <div style="font-weight: 700;">3D Placeholder</div>
+            <div class="pill" id="statePill">No state</div>
+          </div>
+          <canvas id="viz" width="900" height="260"></canvas>
+        </div>
+
+        <div class="card" style="margin-top: 16px;">
+          <div class="row" style="justify-content: space-between; margin-bottom: 8px;">
+            <div style="font-weight: 700;">Robot State</div>
+            <div class="pill mono" id="tsPill">ts: -</div>
+          </div>
+          <div class="kv">
+            <div><b>Position</b><span id="posText" class="mono">-</span></div>
+            <div><b>Orientation</b><span id="oriText" class="mono">-</span></div>
+            <div><b>Safety</b><span id="safetyText" class="mono">-</span></div>
+            <div><b>Backend</b><span id="backendText" class="mono">-</span></div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top: 16px;">
+          <div class="row" style="justify-content: space-between; margin-bottom: 8px;">
+            <div style="font-weight: 700;">Command Log</div>
+            <button id="clearLogBtn">Clear</button>
+          </div>
+          <div id="log" class="log mono"></div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const $ = (id) => document.getElementById(id)
+
+      const state = {
+        token: null,
+        ws: null,
+        lastRobot: null,
+        keys: new Set(),
+        streamTimer: null,
+      }
+
+      const connPill = $("connPill")
+      const loginCard = $("loginCard")
+      const controlsCard = $("controlsCard")
+      const loginMsg = $("loginMsg")
+      const logEl = $("log")
+      const videoImg = $("videoImg")
+      const videoPill = $("videoPill")
+      const keysPill = $("keysPill")
+      const statePill = $("statePill")
+      const tsPill = $("tsPill")
+
+      function setConn(status, cls) {
+        connPill.className = `pill ${cls || ""}`
+        connPill.textContent = status
+      }
+
+      function log(line) {
+        const ts = new Date().toISOString().slice(11, 23)
+        logEl.textContent = `${ts} ${line}\n` + logEl.textContent
+      }
+
+      function base() {
+        const v = $("baseUrl").value.trim()
+        if (v) return v.replace(/\/$/, "")
+        return ""
+      }
+
+      async function doLogin() {
+        loginMsg.textContent = "Logging in…"
+        loginMsg.className = "pill warn"
+        const res = await fetch(`${base()}/api/v1/auth/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: $("username").value,
+            password: $("password").value,
+          }),
+        })
+        if (!res.ok) {
+          const t = await res.text()
+          loginMsg.textContent = `Login failed: ${t}`
+          loginMsg.className = "pill bad"
+          return
+        }
+        const data = await res.json()
+        state.token = data.token
+        loginMsg.textContent = "Login ok"
+        loginMsg.className = "pill ok"
+        videoPill.textContent = data.video_url
+        videoImg.src = `${base()}${data.video_url}`
+        connectWs(data.ws_url)
+        loginCard.classList.add("hidden")
+        controlsCard.classList.remove("hidden")
+        $("disconnectBtn").disabled = false
+      }
+
+      function connectWs(wsUrl) {
+        if (state.ws) {
+          try { state.ws.close() } catch (_) {}
+        }
+        setConn("Connecting", "warn")
+        const url = wsUrl.startsWith("ws") ? wsUrl : `${base().replace(/^http/, "ws")}${wsUrl}`
+        const ws = new WebSocket(url)
+        state.ws = ws
+        ws.onopen = () => {
+          setConn("Connected", "ok")
+          log("ws connected")
+        }
+        ws.onclose = () => {
+          setConn("Disconnected", "bad")
+          log("ws disconnected")
+        }
+        ws.onerror = () => {
+          setConn("Error", "bad")
+          log("ws error")
+        }
+        ws.onmessage = (ev) => {
+          let msg
+          try { msg = JSON.parse(ev.data) } catch (_) { return }
+          if (msg.type === "state") {
+            const robot = msg.robot || null
+            state.lastRobot = robot
+            const status = msg.status || {}
+            updatePanels(robot, status, msg.ts)
+            drawViz(robot)
+            statePill.textContent = "Live"
+            statePill.className = "pill ok"
+            return
+          }
+          if (msg.type === "ack") {
+            log(`ack: ${msg.result?.status || "?"}`)
+            return
+          }
+        }
+      }
+
+      function updatePanels(robot, status, ts) {
+        if (!robot) return
+        const p = robot.position || [0,0,0]
+        const q = robot.orientation || [1,0,0,0]
+        $("posText").textContent = `[${p.map((v) => Number(v).toFixed(3)).join(", ")}]`
+        $("oriText").textContent = `[${q.map((v) => Number(v).toFixed(3)).join(", ")}]`
+        $("safetyText").textContent = `active=${!!status.safety_gate_active} last=${Number(status.last_command_time || 0).toFixed(2)}`
+        $("backendText").textContent = `${status.backend_type || "?"} connected=${!!status.robot_connected}`
+        tsPill.textContent = `ts: ${Number(ts || 0).toFixed(3)}`
+      }
+
+      function sendDelta(dx, dy, dz, dyaw) {
+        if (!state.ws || state.ws.readyState !== 1) return
+        const cmd = {
+          dx,
+          dy,
+          dz,
+          droll: 0,
+          dpitch: 0,
+          dyaw: dyaw || 0,
+          max_velocity: 0.25,
+          max_angular_velocity: 1.2,
+          timestamp: 0,
+          client_id: "web",
+        }
+        state.ws.send(JSON.stringify({ type: "delta", payload: cmd }))
+      }
+
+      function stop() {
+        sendDelta(0, 0, 0, 0)
+      }
+
+      function estop() {
+        const ok = window.confirm('Send E-Stop? This will stop command streaming for this session.')
+        if (!ok) return
+        stop()
+        log("E-Stop requested")
+      }
+
+      function updateKeysPill() {
+        const arr = Array.from(state.keys).sort()
+        keysPill.textContent = `keys: ${arr.length ? arr.join(" ") : "-"}`
+      }
+
+      function startStreaming() {
+        if (state.streamTimer) return
+        state.streamTimer = setInterval(() => {
+          const lin = Number($("linScale").value || 0.02)
+          const yaw = Number($("yawScale").value || 0.08)
+          let dx = 0, dy = 0, dz = 0, dyaw = 0
+          const k = state.keys
+          if (k.has("w") || k.has("ArrowUp")) dy += lin
+          if (k.has("s") || k.has("ArrowDown")) dy -= lin
+          if (k.has("a") || k.has("ArrowLeft")) dx -= lin
+          if (k.has("d") || k.has("ArrowRight")) dx += lin
+          if (k.has("q")) dz += lin
+          if (k.has("e")) dz -= lin
+          if (k.has("j")) dyaw -= yaw
+          if (k.has("l")) dyaw += yaw
+          if (dx || dy || dz || dyaw) sendDelta(dx, dy, dz, dyaw)
+        }, 50)
+      }
+
+      function stopStreaming() {
+        if (!state.streamTimer) return
+        clearInterval(state.streamTimer)
+        state.streamTimer = null
+      }
+
+      function drawViz(robot) {
+        const c = $("viz")
+        const ctx = c.getContext("2d")
+        ctx.clearRect(0, 0, c.width, c.height)
+        const w = c.width
+        const h = c.height
+        ctx.fillStyle = "rgba(0,0,0,0.18)"
+        ctx.fillRect(0, 0, w, h)
+        ctx.strokeStyle = "rgba(34,48,79,1)"
+        for (let x = 0; x <= w; x += 30) {
+          ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke()
+        }
+        for (let y = 0; y <= h; y += 30) {
+          ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke()
+        }
+        ctx.strokeStyle = "rgba(79,140,255,0.9)"
+        ctx.lineWidth = 3
+        ctx.beginPath(); ctx.moveTo(24, h - 24); ctx.lineTo(110, h - 24); ctx.stroke()
+        ctx.strokeStyle = "rgba(110,255,170,0.9)"
+        ctx.beginPath(); ctx.moveTo(24, h - 24); ctx.lineTo(24, h - 110); ctx.stroke()
+        ctx.lineWidth = 1
+
+        const p = (robot && robot.position) ? robot.position : [0, 0, 0]
+        const x = w / 2 + Number(p[0] || 0) * 160
+        const y = h / 2 - Number(p[1] || 0) * 160
+        ctx.fillStyle = "rgba(255,210,90,1)"
+        ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.fill()
+        ctx.fillStyle = "rgba(230,240,255,0.9)"
+        ctx.font = "12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New"
+        ctx.fillText(`x=${Number(p[0]||0).toFixed(3)} y=${Number(p[1]||0).toFixed(3)} z=${Number(p[2]||0).toFixed(3)}`, 16, 18)
+      }
+
+      $("loginBtn").addEventListener("click", () => doLogin().catch((e) => {
+        loginMsg.textContent = `Login error: ${e}`
+        loginMsg.className = "pill bad"
+      }))
+      $("disconnectBtn").addEventListener("click", () => {
+        try { state.ws && state.ws.close() } catch (_) {}
+        stopStreaming()
+        setConn("Disconnected", "bad")
+        loginCard.classList.remove("hidden")
+        controlsCard.classList.add("hidden")
+        $("disconnectBtn").disabled = true
+      })
+      $("stopBtn").addEventListener("click", stop)
+      $("estopBtn").addEventListener("click", estop)
+      $("clearLogBtn").addEventListener("click", () => (logEl.textContent = ""))
+
+      document.addEventListener("keydown", (e) => {
+        if (controlsCard.classList.contains("hidden")) return
+        state.keys.add(e.key)
+        updateKeysPill()
+        startStreaming()
+      })
+      document.addEventListener("keyup", (e) => {
+        state.keys.delete(e.key)
+        updateKeysPill()
+        if (!state.keys.size) stopStreaming()
+      })
+
+      document.querySelectorAll("button[data-cmd]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const lin = Number($("linScale").value || 0.02)
+          const yaw = Number($("yawScale").value || 0.08)
+          const c = btn.getAttribute("data-cmd")
+          const map = {
+            forward: [0, lin, 0, 0],
+            back: [0, -lin, 0, 0],
+            left: [-lin, 0, 0, 0],
+            right: [lin, 0, 0, 0],
+            up: [0, 0, lin, 0],
+            down: [0, 0, -lin, 0],
+            yawLeft: [0, 0, 0, -yaw],
+            yawRight: [0, 0, 0, yaw],
+          }
+          const v = map[c] || [0,0,0,0]
+          sendDelta(v[0], v[1], v[2], v[3])
+        })
+      })
+
+      setConn("Disconnected", "warn")
+      loginMsg.textContent = "Default: operator / operator"
+    </script>
+  </body>
+</html>

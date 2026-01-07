@@ -1,0 +1,21 @@
+version: "3.8"
+
+services:
+  teleop-server:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile
+    environment:
+      - TELEOP_BACKEND=${TELEOP_BACKEND:-mock}
+      - TELEOP_ISAAC_HOST=0.0.0.0
+      - TELEOP_ISAAC_PORT=9000
+    ports:
+      - "8000:8000"
+      - "9000:9000"
+    restart: unless-stopped
+    networks:
+      - teleop-network
+
+networks:
+  teleop-network:
+    driver: bridge

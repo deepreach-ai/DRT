@@ -1,0 +1,1313 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VR Teleoperation - Quest 3S</title>
+    
+    <!-- ES Module Shims: Required for reliable Import Maps support in VR browsers -->
+    <script async src="https://ga.jspm.io/npm:es-module-shims@1.8.2/dist/es-module-shims.js"></script>
+
+    <!-- Import Map for Three.js and Loaders -->
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://esm.sh/three@0.158.0",
+            "urdf-loader": "https://esm.sh/urdf-loader@0.12.6?deps=three@0.158.0"
+        }
+    }
+    </script>
+    
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b1220;
+        --surface: #111a2e;
+        --border: #22304f;
+        --text: #e6eef9;
+        --accent: #4f8cff;
+      }
+      
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      
+      body {
+        font-family: ui-sans-serif, system-ui, -apple-system;
+        background: var(--bg);
+        color: var(--text);
+        overflow: hidden;
+      }
+      
+      /* 2D UI (shown before entering VR) */
+      #ui-2d {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        padding: 20px;
+      }
+      
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 24px;
+        max-width: 500px;
+        width: 100%;
+      }
+      
+      h1 {
+        font-size: 28px;
+        margin-bottom: 8px;
+      }
+      
+      .subtitle {
+        color: var(--text);
+        opacity: 0.7;
+        margin-bottom: 24px;
+      }
+      
+      .status-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+        margin-bottom: 24px;
+      }
+      
+      .status-item {
+        background: rgba(0,0,0,0.3);
+        padding: 12px;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+      }
+      
+      .status-label {
+        font-size: 11px;
+        color: var(--text);
+        opacity: 0.6;
+        margin-bottom: 4px;
+      }
+      
+      .status-value {
+        font-size: 14px;
+        font-weight: 600;
+      }
+      
+      .pill {
+        display: inline-block;
+        padding: 4px 8px;
+        border-radius: 999px;
+        font-size: 11px;
+        border: 1px solid var(--border);
+      }
+      
+      .pill.ok { color: #a6f4c5; border-color: rgba(110, 255, 170, 0.3); background: rgba(110, 255, 170, 0.1); }
+      .pill.bad { color: #ffb4b4; border-color: rgba(255, 77, 79, 0.3); background: rgba(255, 77, 79, 0.1); }
+      .pill.warn { color: #ffd29b; border-color: rgba(255, 208, 120, 0.3); background: rgba(255, 208, 120, 0.1); }
+      
+      input {
+        width: 100%;
+        padding: 12px;
+        background: rgba(0,0,0,0.25);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        outline: none;
+        margin-bottom: 12px;
+        font-size: 14px;
+      }
+      
+      button {
+        width: 100%;
+        padding: 14px;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        background: rgba(79, 140, 255, 0.16);
+        color: var(--text);
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 600;
+        transition: all 0.2s;
+      }
+      
+      button:hover {
+        background: rgba(79, 140, 255, 0.28);
+        transform: translateY(-1px);
+      }
+      
+      button:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+      
+      button.primary {
+        background: rgba(79, 140, 255, 0.3);
+        border-color: rgba(79, 140, 255, 0.6);
+      }
+      
+      button.danger {
+        background: rgba(255, 77, 79, 0.2);
+        border-color: rgba(255, 77, 79, 0.6);
+      }
+      
+      .btn-group {
+        display: flex;
+        gap: 12px;
+        margin-top: 12px;
+      }
+      
+      .btn-group button {
+        flex: 1;
+      }
+      
+      /* 3D Canvas for VR */
+      #vr-canvas {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: none;
+      }
+
+      /* Exit Button Overlay (Visible in Sim Mode or if VR UI fails) */
+      #exit-overlay {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 2000;
+        display: none;
+      }
+      
+      #exit-overlay button {
+        background: rgba(255, 77, 79, 0.8);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        color: white;
+        padding: 10px 20px;
+        border-radius: 30px;
+        font-weight: bold;
+        backdrop-filter: blur(4px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        width: auto;
+      }
+
+      .hidden { display: none !important; }
+
+      body.embed .card {
+        max-width: none;
+        width: 100%;
+        padding: 0;
+        border-radius: 0;
+        border: none;
+        background: transparent;
+        box-shadow: none;
+      }
+      body.embed h1,
+      body.embed .subtitle,
+      body.embed .status-grid,
+      body.embed #exit-overlay,
+      body.embed #debug-log {
+        display: none !important;
+      }
+      
+      /* Video elements (hidden, used as textures) */
+      #video-left, #video-right, #video-depth {
+        display: none;
+      }
+      
+      .info-text {
+        font-size: 13px;
+        color: var(--text);
+        opacity: 0.6;
+        line-height: 1.6;
+        margin-top: 16px;
+      }
+      
+      #debug-log {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        height: 150px;
+        background: rgba(0,0,0,0.8);
+        color: #0f0;
+        font-family: monospace;
+        font-size: 12px;
+        padding: 10px;
+        overflow-y: auto;
+        z-index: 9999;
+        display: none; /* Hidden by default, toggle with 'D' key */
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Debug Log Overlay -->
+    <div id="debug-log"></div>
+
+    <!-- 2D UI (Pre-VR) -->
+    <div id="ui-2d">
+      <div class="card">
+        <h1>🥽 VR Teleoperation</h1>
+        <p class="subtitle">Quest 3S Remote Robot Control</p>
+        
+        <!-- Status Display -->
+        <div class="status-grid">
+          <div class="status-item">
+            <div class="status-label">WebXR Support</div>
+            <div class="status-value" id="xr-support">
+              <span class="pill warn">Checking...</span>
+            </div>
+            <button id="btn-simulate-vr" class="secondary" style="font-size: 12px; padding: 8px; margin-top: 8px; background: rgba(79, 140, 255, 0.2); display: none;">👉 Enter Simulated VR Mode</button>
+          </div>
+          
+          <div class="status-item">
+            <div class="status-label">Server Connection</div>
+            <div class="status-value" id="server-status">
+              <span class="pill warn">Not Connected</span>
+            </div>
+          </div>
+          
+          <div class="status-item">
+            <div class="status-label">Video Streams</div>
+            <div class="status-value" id="video-status">
+              <span class="pill warn">0/3</span>
+            </div>
+          </div>
+          
+          <div class="status-item">
+            <div class="status-label">Latency</div>
+            <div class="status-value" id="latency-display">
+              <span class="pill warn">-- ms</span>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Login Form -->
+        <div id="login-section">
+          <input id="server-url" type="text" placeholder="Server URL (e.g., http://192.168.1.100:8000)" />
+          <input id="username" type="text" placeholder="Username" value="operator" />
+          <input id="password" type="password" placeholder="Password" value="operator" />
+          <button id="btn-connect" class="primary">Connect to Server</button>
+        </div>
+        
+        <!-- VR Controls (shown after connection) -->
+        <div id="vr-section" class="hidden">
+          <button id="btn-enter-vr" class="primary">🥽 Enter VR Mode</button>
+          <div class="btn-group">
+            <button id="btn-test-video">Test Video</button>
+            <button id="btn-calibrate">Calibrate</button>
+          </div>
+          <button id="btn-disconnect" class="danger" style="margin-top: 12px;">Disconnect</button>
+          
+          <p class="info-text">
+            <strong>Controls in VR:</strong><br>
+            • Left/Right Grip: Control robot arms<br>
+            • Triggers: Open/close grippers<br>
+            • B Button: Emergency stop<br>
+            • Menu: Exit VR
+          </p>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 3D Canvas for VR -->
+    <canvas id="vr-canvas"></canvas>
+    
+    <!-- Exit Overlay -->
+    <div id="exit-overlay">
+        <button id="btn-force-exit">✕ Exit VR</button>
+    </div>
+
+    <!-- Hidden Video Elements (used as textures) -->
+    <video id="video-left" autoplay muted playsinline></video>
+    <video id="video-right" autoplay muted playsinline></video>
+    <video id="video-depth" autoplay muted playsinline></video>
+    
+    <script src="static/teleop.js"></script>
+
+    <!-- Global Error Handler & Debug Log (Non-module to run first) -->
+    <script>
+      // ========================================
+      // DEBUG LOGGING & ERROR HANDLING
+      // ========================================
+      const debugLogEl = document.getElementById('debug-log');
+      
+      function logToScreen(msg, type='info') {
+          if (!debugLogEl) return;
+          const line = document.createElement('div');
+          line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+          if (type === 'error') line.style.color = '#ff5555';
+          if (type === 'warn') line.style.color = '#ffaa55';
+          debugLogEl.appendChild(line);
+          debugLogEl.scrollTop = debugLogEl.scrollHeight;
+          
+          // Auto-show on error
+          if (type === 'error') {
+              debugLogEl.style.display = 'block';
+          }
+      }
+      
+      // Override console methods
+      const originalLog = console.log;
+      const originalWarn = console.warn;
+      const originalError = console.error;
+      
+      console.log = (...args) => {
+          originalLog(...args);
+          // Filter out spammy logs if needed
+          logToScreen(args.join(' '));
+      };
+      console.warn = (...args) => {
+          originalWarn(...args);
+          logToScreen(args.join(' '), 'warn');
+      };
+      console.error = (...args) => {
+          originalError(...args);
+          logToScreen(args.join(' '), 'error');
+      };
+
+      // Global Error Listeners
+      window.addEventListener('error', (event) => {
+          console.error(`Script Error: ${event.message} at ${event.filename}:${event.lineno}`);
+      });
+      
+      window.addEventListener('unhandledrejection', (event) => {
+          console.error(`Unhandled Promise Rejection: ${event.reason}`);
+      });
+      
+      // Show debug log on 'D' key
+      document.addEventListener('keydown', (e) => {
+          if (e.key.toLowerCase() === 'd' && e.shiftKey) {
+              if (debugLogEl) debugLogEl.style.display = debugLogEl.style.display === 'none' ? 'block' : 'none';
+          }
+      });
+    </script>
+
+    <!-- Main VR Application Script -->
+    <script type="module">
+      import * as THREE from 'three';
+      import URDFLoader from 'urdf-loader';
+
+      // Expose globally for debugging or other scripts
+      window.THREE = THREE;
+      
+      // ========================================
+      // GLOBAL STATE
+      // ========================================
+      const state = {
+        serverUrl: '',
+        token: null,
+        ws: null,
+        xrSession: null,
+        connected: false,
+        inVR: false,
+        latency: 0,
+        videoStreams: {
+          left: false,
+          right: false,
+          depth: false
+        },
+        // Controller State
+        lastControllerPose: null,
+        clutchActive: false,
+        // Robot Model
+        robot: null
+      };
+      
+      // DOM Elements
+      const $ = (id) => document.getElementById(id);
+      const ui2d = $('ui-2d');
+      const loginSection = $('login-section');
+      const vrSection = $('vr-section');
+      const canvas = $('vr-canvas');
+      
+      const videoLeft = $('video-left');
+      const videoRight = $('video-right');
+      const videoDepth = $('video-depth');
+      
+      // ========================================
+      // INITIALIZATION
+      // ========================================
+      
+      async function init() {
+        console.log('[VR] Initializing...');
+        
+        // Check Secure Context
+        if (!window.isSecureContext) {
+            console.warn('[VR] Insecure context detected. WebXR requires HTTPS or localhost.');
+            updateStatus('xr-support', 'HTTPS Required', 'bad');
+            alert('WebXR requires a Secure Context (HTTPS or localhost).\nPlease use the ngrok URL (https://...) or localhost.');
+        }
+
+        // Check WebXR support
+        if (window.isSecureContext) {
+            checkXRSupport();
+        } else {
+             $('btn-simulate-vr').style.display = 'block';
+        }
+        
+        // Set up event listeners
+        $('btn-connect').addEventListener('click', connectToServer);
+        $('btn-enter-vr').addEventListener('click', enterVR);
+        $('btn-disconnect').addEventListener('click', disconnect);
+        $('btn-test-video').addEventListener('click', testVideoStreams);
+        $('btn-calibrate').addEventListener('click', calibrateControllers);
+        $('btn-force-exit').addEventListener('click', exitVR);
+        
+        // Global Keyboard Shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                console.log('[VR] ESC pressed, exiting VR...');
+                exitVR();
+            }
+        });
+        
+        // Auto-fill server URL based on current page
+        // Use origin directly to support ngrok (no port 8000) and localhost (with port) correctly
+        $('server-url').value = window.location.origin;
+
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('embed') === '1') {
+            document.body.classList.add('embed');
+        }
+        if (params.get('server')) {
+            $('server-url').value = params.get('server');
+        }
+        if (params.get('username')) {
+            $('username').value = params.get('username');
+        }
+        if (params.get('password')) {
+            $('password').value = params.get('password');
+        }
+        
+        // Setup Simulate VR button
+        $('btn-simulate-vr').addEventListener('click', enterSimulatedVR);
+
+        const tokenParam = params.get('token');
+        const autoConnect = params.get('autoconnect') === '1';
+        if (tokenParam) {
+            setTimeout(() => {
+                connectWithToken($('server-url').value.trim(), tokenParam, params.get('autosim') === '1');
+            }, 0);
+        } else if (autoConnect) {
+            setTimeout(() => connectToServer(), 0);
+        }
+
+        console.log('[VR] Initialization complete');
+      }
+      
+      // ========================================
+      // WEBXR SUPPORT CHECK
+      // ========================================
+      
+      async function checkXRSupport() {
+        if ('xr' in navigator) {
+          try {
+            const supported = await navigator.xr.isSessionSupported('immersive-vr');
+            if (supported) {
+              updateStatus('xr-support', 'Supported ✓', 'ok');
+              console.log('[VR] WebXR is supported!');
+            } else {
+              updateStatus('xr-support', 'Not Found (Use Simulator)', 'bad');
+              console.warn('[VR] WebXR not supported on this device');
+              $('btn-simulate-vr').style.display = 'block';
+            }
+          } catch (err) {
+            updateStatus('xr-support', 'Error (Use Simulator)', 'bad');
+            console.error('[VR] Error checking WebXR support:', err);
+            $('btn-simulate-vr').style.display = 'block';
+          }
+        } else {
+          updateStatus('xr-support', 'Not Found (Use Simulator)', 'bad');
+          console.warn('[VR] navigator.xr not found');
+          $('btn-simulate-vr').style.display = 'block';
+        }
+      }
+      
+      // ========================================
+      // SERVER CONNECTION
+      // ========================================
+
+      function normalizeServerUrl(serverUrl) {
+        if (!serverUrl) return '';
+        let cleanUrl = serverUrl.replace(/\/$/, '');
+        if (!cleanUrl.startsWith('http')) {
+            if (cleanUrl.includes('localhost') || cleanUrl.includes('127.0.0.1')) {
+                cleanUrl = 'http://' + cleanUrl;
+            } else {
+                cleanUrl = 'https://' + cleanUrl;
+            }
+        }
+        return cleanUrl;
+      }
+
+      function finishConnect(cleanUrl, token, autoSim) {
+        state.serverUrl = cleanUrl;
+        state.token = token;
+        if (!window.teleopClient) {
+            window.teleopClient = new TeleopClient();
+        }
+        window.teleopClient.setServerUrl(cleanUrl);
+        window.teleopClient.setToken(token);
+        window.teleopClient.connect();
+
+        initVideoStreams();
+
+        state.connected = true;
+        updateStatus('server-status', 'Connected ✓', 'ok');
+        loginSection.classList.add('hidden');
+        vrSection.classList.remove('hidden');
+
+        if (autoSim) {
+            setTimeout(() => enterSimulatedVR(), 50);
+        }
+      }
+
+      function connectWithToken(serverUrl, token, autoSim) {
+        const cleanUrl = normalizeServerUrl(serverUrl);
+        if (!cleanUrl || !token) return;
+        try {
+            updateStatus('server-status', 'Connecting...', 'warn');
+            finishConnect(cleanUrl, token, autoSim);
+        } catch (err) {
+            console.error('[VR] Token connect error:', err);
+            updateStatus('server-status', 'Failed', 'bad');
+        }
+      }
+      
+      async function connectToServer() {
+        const serverUrl = $('server-url').value.trim();
+        const username = $('username').value.trim();
+        const password = $('password').value.trim();
+        
+        if (!serverUrl) {
+          alert('Please enter server URL');
+          return;
+        }
+        
+        const cleanUrl = normalizeServerUrl(serverUrl);
+        
+        state.serverUrl = cleanUrl;
+        
+        try {
+          updateStatus('server-status', 'Connecting...', 'warn');
+          console.log(`[VR] Connecting to ${cleanUrl}...`);
+          
+          // Login with timeout
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+          
+          try {
+              const loginRes = await fetch(`${cleanUrl}/api/v1/auth/login`, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'ngrok-skip-browser-warning': 'true'
+                },
+                body: JSON.stringify({ username, password }),
+                signal: controller.signal
+              });
+              clearTimeout(timeoutId);
+              
+              if (!loginRes.ok) {
+                throw new Error('Login failed: ' + await loginRes.text());
+              }
+              
+              const loginData = await loginRes.json();
+              state.token = loginData.token;
+              
+              console.log('[VR] Login successful, token received');
+              
+              const params = new URLSearchParams(window.location.search);
+              finishConnect(cleanUrl, loginData.token, params.get('autosim') === '1');
+              console.log('[VR] Connected to server');
+          } catch (error) {
+              clearTimeout(timeoutId);
+              throw error;
+          }
+          
+        } catch (err) {
+          console.error('[VR] Connection error:', err);
+          updateStatus('server-status', 'Failed', 'bad');
+          
+          // Show debug log on error
+          if (debugLogEl) debugLogEl.style.display = 'block';
+          
+          alert('Connection failed: ' + (err?.message || 'Unknown error'));
+        }
+      }
+      
+      async function connectWebSocket(wsPath) {
+        return new Promise((resolve, reject) => {
+          const wsUrl = wsPath.startsWith('ws') 
+            ? wsPath 
+            : `${state.serverUrl.replace(/^http/, 'ws')}${wsPath}`;
+          
+          console.log('[VR] Connecting WebSocket:', wsUrl);
+          
+          const ws = new WebSocket(wsUrl);
+          state.ws = ws;
+          
+          ws.onopen = () => {
+            console.log('[VR] WebSocket connected');
+            resolve();
+          };
+          
+          ws.onerror = (err) => {
+            console.error('[VR] WebSocket error:', err);
+            reject(err);
+          };
+          
+          ws.onclose = () => {
+            console.log('[VR] WebSocket closed');
+            updateStatus('server-status', 'Disconnected', 'bad');
+            state.connected = false;
+          };
+          
+          ws.onmessage = (event) => {
+            try {
+              const msg = JSON.parse(event.data);
+              handleServerMessage(msg);
+            } catch (err) {
+              console.error('[VR] Message parse error:', err);
+            }
+          };
+        });
+      }
+      
+      function handleServerMessage(msg) {
+        if (msg.type === 'state') {
+          // Update latency
+          const now = Date.now();
+          state.latency = now - (msg.timestamp || now);
+          updateStatus('latency-display', `${state.latency}ms`, 
+            state.latency < 100 ? 'ok' : 'warn');
+        }
+      }
+      
+      // ========================================
+      // VIDEO STREAMING
+      // ========================================
+      
+      const videoTextures = {
+          left: { texture: null, ctx: null, img: null },
+          right: { texture: null, ctx: null, img: null },
+          depth: { texture: null, ctx: null, img: null }
+      };
+
+      function initVideoStreams() {
+        console.log('[VR] Initializing video streams...');
+        
+        // For now, use MJPEG streams
+        // TODO: Switch to WebRTC for lower latency
+        
+        // Left camera (Arm 1)
+        const leftUrl = `${state.serverUrl}/api/v1/video/left/mjpeg?token=${state.token}`;
+        setupVideoStream(leftUrl, 'left');
+        
+        // Right camera (Arm 2)
+        const rightUrl = `${state.serverUrl}/api/v1/video/right/mjpeg?token=${state.token}`;
+        setupVideoStream(rightUrl, 'right');
+        
+        // Depth camera
+        const depthUrl = `${state.serverUrl}/api/v1/video/depth/mjpeg?token=${state.token}`;
+        setupVideoStream(depthUrl, 'depth');
+      }
+      
+      function setupVideoStream(url, name) {
+        console.log(`[VR] Setting up ${name} stream:`, url);
+        
+        // Create image element for MJPEG
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.src = url;
+        
+        // Create Canvas and Texture immediately (don't wait for load)
+        const canvas = document.createElement('canvas');
+        canvas.width = 960; // Default size, will resize if needed
+        canvas.height = 540;
+        const ctx = canvas.getContext('2d');
+        
+        // Fill with placeholder initially
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '30px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(`Loading ${name}...`, canvas.width/2, canvas.height/2);
+
+        let texture = null;
+        if (THREE) {
+            texture = new THREE.CanvasTexture(canvas);
+            texture.minFilter = THREE.LinearFilter;
+            texture.magFilter = THREE.LinearFilter;
+        }
+        
+        // Store for update loop
+        videoTextures[name] = { texture, ctx, img, canvas };
+        
+        img.onload = () => {
+          console.log(`[VR] ${name} stream loaded (${img.width}x${img.height})`);
+          state.videoStreams[name] = true;
+          canvas.width = img.width || 960;
+          canvas.height = img.height || 540;
+          
+          // Re-create texture if it was missing and THREE is now ready (edge case)
+          // Ideally, we wait for THREE before connecting, but this is safer
+          if (!videoTextures[name].texture && THREE) {
+              const t = new THREE.CanvasTexture(canvas);
+              t.minFilter = THREE.LinearFilter;
+              t.magFilter = THREE.LinearFilter;
+              videoTextures[name].texture = t;
+          }
+          
+          updateVideoStatus();
+        };
+        
+        img.onerror = (err) => {
+          console.error(`[VR] ${name} stream error:`, err);
+          state.videoStreams[name] = false;
+          
+          // Draw error on canvas
+          ctx.fillStyle = '#330000';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.fillStyle = '#ff0000';
+          ctx.fillText('Stream Error', canvas.width/2, canvas.height/2);
+          
+          if (texture) texture.needsUpdate = true;
+          
+          updateVideoStatus();
+        };
+      }
+      
+      function updateVideoStatus() {
+        const count = Object.values(state.videoStreams).filter(v => v).length;
+        updateStatus('video-status', `${count}/3`, count === 3 ? 'ok' : 'warn');
+      }
+      
+      function updateVideoTextures() {
+          for (const key in videoTextures) {
+              const item = videoTextures[key];
+              if (item && item.img && item.ctx && item.texture && state.videoStreams[key]) {
+                  if (item.img.complete && item.img.naturalWidth > 0) {
+                      item.ctx.drawImage(item.img, 0, 0, item.canvas.width, item.canvas.height);
+                      item.texture.needsUpdate = true;
+                  }
+              }
+          }
+      }
+
+      function testVideoStreams() {
+        console.log('[VR] Testing video streams...');
+        alert('Video test - check console for stream status');
+        console.log('Video streams:', state.videoStreams);
+      }
+      
+      // ========================================
+      // VR MODE
+      // ========================================
+      
+      async function enterSimulatedVR() {
+         if (!state.connected) {
+          alert('Please connect to server first');
+          return;
+        }
+
+        console.log('[VR] Entering Simulated VR Mode...');
+        state.inVR = true;
+        state.simulated = true; // Flag for simulation
+
+        // Hide 2D UI
+        ui2d.style.display = 'none';
+        canvas.style.display = 'block';
+        $('exit-overlay').style.display = 'block';
+
+        // Initialize VR scene (without session)
+        await initVRScene(null);
+        
+        // Start render loop manually since we don't have XRSession
+        function animate() {
+            if (!state.inVR) return;
+            requestAnimationFrame(animate);
+            renderVRFrame(performance.now(), null);
+        }
+        animate();
+      }
+
+      async function enterVR() {
+        if (!state.connected) {
+          alert('Please connect to server first');
+          return;
+        }
+        
+        if (!('xr' in navigator)) {
+          alert('WebXR not supported in this browser');
+          return;
+        }
+        
+        try {
+          console.log('[VR] Requesting VR session...');
+          
+          let session;
+          try {
+              // Try with local-floor (preferred)
+              session = await navigator.xr.requestSession('immersive-vr', {
+                requiredFeatures: ['local-floor'],
+                optionalFeatures: ['hand-tracking', 'layers']
+              });
+          } catch (e) {
+              console.warn('[VR] local-floor not supported, trying fallback...');
+              // Fallback to viewer or local if local-floor fails
+              session = await navigator.xr.requestSession('immersive-vr', {
+                requiredFeatures: ['viewer'], // Minimal requirement
+                optionalFeatures: ['local-floor', 'local', 'hand-tracking', 'layers']
+              });
+          }
+          
+          state.xrSession = session;
+          state.inVR = true;
+          
+          console.log('[VR] VR session started!');
+          
+          // Hide 2D UI
+          ui2d.style.display = 'none';
+          canvas.style.display = 'block';
+          
+          // Initialize VR scene
+          await initVRScene(session);
+          
+          // Handle session end
+          session.addEventListener('end', onVRSessionEnd);
+          
+        } catch (err) {
+          console.error('[VR] Failed to enter VR:', err);
+          alert('Failed to enter VR: ' + err.message);
+        }
+      }
+      
+      function exitVR() {
+          console.log('[VR] Exiting VR Mode...');
+          if (state.xrSession) {
+              state.xrSession.end().catch(e => console.error('Error ending session:', e));
+          } else {
+              // Manual exit for simulated mode
+              onVRSessionEnd();
+          }
+      }
+      
+      function onVRSessionEnd() {
+        console.log('[VR] VR session ended');
+        state.inVR = false;
+        state.xrSession = null;
+        state.simulated = false;
+        
+        // Show 2D UI
+        ui2d.style.display = 'flex';
+        canvas.style.display = 'none';
+        $('exit-overlay').style.display = 'none';
+        
+        // Reset controller state
+        state.lastControllerPose = null;
+        state.clutchActive = false;
+      }
+      
+      // ========================================
+      // VR SCENE (Three.js)
+      // ========================================
+      
+      let scene, camera, renderer, vrCamera;
+      let leftEyeScreen, rightEyeScreen, depthHUD;
+      
+      async function initVRScene(session) {
+        if (!THREE) {
+            console.error('[VR] Cannot init scene: THREE not loaded');
+            return;
+        }
+        console.log('[VR] Initializing VR scene...');
+        
+        // Create Three.js scene
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x111a2e);
+        
+        // Camera
+        camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const cameraGroup = new THREE.Group();
+        cameraGroup.position.set(0, 1.6, 1); // Default user height 1.6m, back 1m
+        cameraGroup.add(camera);
+        scene.add(cameraGroup);
+        
+        // Renderer
+        renderer = new THREE.WebGLRenderer({ 
+          canvas: canvas,
+          antialias: true,
+          alpha: true
+        });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        
+        if (session) {
+            renderer.xr.enabled = true;
+            renderer.xr.setSession(session);
+            renderer.setAnimationLoop(renderVRFrame);
+        } else {
+            // Simulated VR setup
+            renderer.xr.enabled = false;
+        }
+
+        // Load Robot Model
+        if (typeof loadRobotModel !== 'undefined') loadRobotModel();
+        
+        // Create stereo video screens
+        createVideoScreens();
+        
+        // Add lighting
+        const light = new THREE.HemisphereLight(0xffffff, 0x444444);
+        light.position.set(0, 20, 0);
+        scene.add(light);
+        
+        // Add Environment Reference (Grid & Axes)
+        const gridHelper = new THREE.GridHelper(10, 10, 0x444444, 0x222222);
+        scene.add(gridHelper);
+        
+        const axesHelper = new THREE.AxesHelper(1);
+        axesHelper.position.set(0, 0.01, 0); // Lift slightly to avoid z-fighting
+        scene.add(axesHelper);
+        
+        // Add a floating text hint
+        // (Optional: Could add TextGeometry but simpler to just ensure scene isn't empty)
+
+        // Start render loop
+        if (session) {
+            renderer.setAnimationLoop(renderVRFrame);
+        }
+        
+        console.log('[VR] VR scene initialized');
+      }
+      
+      function createVideoScreens() {
+        if (!THREE) return;
+        // Left eye screen (shows left camera)
+        // Use pre-created texture if available, or create placeholder
+        const leftMat = new THREE.MeshBasicMaterial({ 
+            map: videoTextures.left.texture,
+            side: THREE.DoubleSide
+        });
+        const leftGeometry = new THREE.PlaneGeometry(1.6, 0.9);
+        leftEyeScreen = new THREE.Mesh(leftGeometry, leftMat);
+        leftEyeScreen.position.set(-0.85, 1.5, -2);
+        // Rotate slightly inward
+        leftEyeScreen.rotation.y = 0.15;
+        scene.add(leftEyeScreen);
+        
+        // Right eye screen (shows right camera)
+        const rightMat = new THREE.MeshBasicMaterial({ 
+            map: videoTextures.right.texture,
+            side: THREE.DoubleSide
+        });
+        const rightGeometry = new THREE.PlaneGeometry(1.6, 0.9);
+        rightEyeScreen = new THREE.Mesh(rightGeometry, rightMat);
+        rightEyeScreen.position.set(0.85, 1.5, -2);
+        rightEyeScreen.rotation.y = -0.15;
+        scene.add(rightEyeScreen);
+        
+        // Depth HUD (smaller, bottom center)
+        const depthMat = new THREE.MeshBasicMaterial({ 
+            map: videoTextures.depth.texture,
+            side: THREE.DoubleSide
+        });
+        const depthGeometry = new THREE.PlaneGeometry(0.8, 0.45);
+        depthHUD = new THREE.Mesh(depthGeometry, depthMat);
+        depthHUD.position.set(0, 0.6, -1.8);
+        depthHUD.rotation.x = -0.2;
+        scene.add(depthHUD);
+        
+        console.log('[VR] Video screens created');
+      }
+      
+      // Robot Loading
+      let ghostRobot = null;
+      function loadRobotModel() {
+          if (!URDFLoader) return;
+          
+          const urlParams = new URLSearchParams(window.location.search);
+          const urdfName = urlParams.get('urdf') || 'so101';
+          const urdfPath = `/assets/robots/${urdfName}.urdf`;
+          
+          console.log(`[VR] Loading robot model: ${urdfPath}`);
+          const loader = new URDFLoader();
+          
+          loader.packages = { 
+              'RM75-B': '/assets/robots/realman_75',
+              'so101': '/assets/robots',
+              'crt_ctag2f90d_gripper_visualization': '/assets/gripper'
+          };
+          
+          // 1. Load Main Robot (Actual state)
+          loader.load(urdfPath, result => {
+              state.robot = result;
+              state.robot.position.set(0, 0.8, -0.8);
+              state.robot.rotation.x = -Math.PI / 2;
+              scene.add(state.robot);
+              
+              // 2. Load Ghost Robot (Target state/Trajectory)
+              loader.load(urdfPath, ghost => {
+                  ghostRobot = ghost;
+                  ghostRobot.position.set(0, 0.8, -0.8);
+                  ghostRobot.rotation.x = -Math.PI / 2;
+                  
+                  // Make semi-transparent
+                  ghostRobot.traverse(c => {
+                      if (c.isMesh) {
+                          c.material = c.material.clone();
+                          c.material.transparent = true;
+                          c.material.opacity = 0.3;
+                          c.material.color.setHex(0x4f8cff); // Accent color for target
+                      }
+                  });
+                  scene.add(ghostRobot);
+                  console.log('[VR] Ghost robot loaded');
+              });
+              
+              // Add a table
+              const tableGeom = new THREE.BoxGeometry(1, 0.8, 1);
+              const tableMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
+              const table = new THREE.Mesh(tableGeom, tableMat);
+              table.position.set(0, 0.4, -0.8);
+              scene.add(table);
+          });
+      }
+
+      function updateRobotJoints(joints, isTarget = false) {
+          const model = isTarget ? ghostRobot : state.robot;
+          if (!model || !joints) return;
+          
+          let jointNames = [];
+          if (model.name.includes('RM75-B')) {
+              jointNames = ['joint_1', 'joint_2', 'joint_3', 'joint_4', 'joint_5', 'joint_6', 'joint_7', 'Left_1_Joint', 'Left_Support_Joint', 'Left_2_Joint', 'Right_2_Joint', 'Right_1_Joint', 'Right_Support_Joint'];
+          } else if (model.name.includes('dual')) {
+              jointNames = ['left_shoulder_pan', 'left_shoulder_lift', 'left_elbow_flex', 'left_wrist_flex', 'left_wrist_roll', 'left_gripper', 'right_shoulder_pan', 'right_shoulder_lift', 'right_elbow_flex', 'right_wrist_flex', 'right_wrist_roll', 'right_gripper'];
+          } else {
+              jointNames = ['shoulder_pan', 'shoulder_lift', 'elbow_flex', 'wrist_flex', 'wrist_roll', 'gripper'];
+          }
+          
+          for (let i = 0; i < jointNames.length; i++) {
+              if (i >= joints.length) break;
+              const name = jointNames[i];
+              if (model.joints[name]) model.joints[name].setJointValue(joints[i]);
+          }
+      }
+
+      // Bind to TeleopClient
+      const checkClientInterval = setInterval(() => {
+          if (window.teleopClient) {
+              clearInterval(checkClientInterval);
+              window.teleopClient.onStateUpdate = (robotState) => {
+                  if (robotState.joints) updateRobotJoints(robotState.joints, false);
+                  // Optional: if server sends target joints, update ghost
+                  if (robotState.target_joints) updateRobotJoints(robotState.target_joints, true);
+              };
+          }
+      }, 500);
+
+      // Matrix to transform from VR Frame (Y-up, -Z-fwd, X-right) 
+      // to Robot Frame (Z-up, X-fwd, Y-left)
+      // X_rob = -Z_vr
+      // Y_rob = -X_vr
+      // Z_rob = Y_vr
+      let VR_TO_ROBOT, VR_TO_ROBOT_INV;
+      
+      // Initialize matrices after THREE loads
+      const initMatricesInterval = setInterval(() => {
+          if (THREE) {
+              clearInterval(initMatricesInterval);
+              VR_TO_ROBOT = new THREE.Matrix4().set(
+                 0,  0, -1,  0,
+                -1,  0,  0,  0,
+                 0,  1,  0,  0,
+                 0,  0,  0,  1
+              );
+              VR_TO_ROBOT_INV = new THREE.Matrix4().copy(VR_TO_ROBOT).invert();
+          }
+      }, 100);
+
+      function renderVRFrame(time, frame) {
+        if (!state.inVR) return;
+        
+        // Update Video Textures from MJPEG streams
+        updateVideoTextures();
+
+        if (state.simulated) {
+             // Simulate Input (e.g. use mouse/keyboard to simulate joystick?)
+             // For now, just render scene
+             renderer.render(scene, camera);
+             return;
+        }
+
+        if (!frame) return;
+        
+        // Handle Controller Input
+        const session = frame.session;
+        const refSpace = renderer.xr.getReferenceSpace();
+        
+        // Initialize state for tracking if not exists
+        if (!state.controllers) state.controllers = { left: { lastPose: null }, right: { lastPose: null } };
+
+        for (const inputSource of session.inputSources) {
+            const handedness = inputSource.handedness; // 'left' or 'right'
+            if (handedness !== 'left' && handedness !== 'right') continue;
+            
+            const gp = inputSource.gamepad;
+            if (!gp || !window.teleopClient) continue;
+            
+            const buttons = gp.buttons;
+            const axes = gp.axes;
+            
+            let dx = 0, dy = 0, dz = 0;
+            let droll = 0, dpitch = 0, dyaw = 0;
+            let gripper = -1;
+
+            // 1. CLUTCH & 6-DoF
+            const isClutchPressed = buttons[1] && buttons[1].pressed;
+
+            if (isClutchPressed) {
+                const pose = frame.getPose(inputSource.gripSpace, refSpace);
+                if (pose) {
+                    const currPos = pose.transform.position;
+                    const currRot = pose.transform.orientation;
+                    const lastPose = state.controllers[handedness].lastPose;
+                    
+                    if (lastPose) {
+                        // Position Delta
+                        const dPosVR = new THREE.Vector3().subVectors(currPos, lastPose.position);
+                        dPosVR.applyMatrix4(VR_TO_ROBOT);
+                        const POS_SCALE = 0.8; // Reduced from 1.5 to 0.8 for better control
+                        dx = dPosVR.x * POS_SCALE;
+                        dy = dPosVR.y * POS_SCALE;
+                        dz = dPosVR.z * POS_SCALE;
+
+                        // Rotation Delta
+                        const qCurr = new THREE.Quaternion(currRot.x, currRot.y, currRot.z, currRot.w);
+                        const qPrev = new THREE.Quaternion(lastPose.orientation.x, lastPose.orientation.y, lastPose.orientation.z, lastPose.orientation.w);
+                        const qDiff = qCurr.clone().multiply(qPrev.clone().invert());
+                        const mDiff = new THREE.Matrix4().makeRotationFromQuaternion(qDiff);
+                        const mDiffRob = mDiff.clone().premultiply(VR_TO_ROBOT).multiply(VR_TO_ROBOT_INV);
+                        const euler = new THREE.Euler().setFromRotationMatrix(mDiffRob, 'XYZ');
+                        
+                        const ROT_SCALE = 1.0;
+                        droll = euler.x * ROT_SCALE;
+                        dpitch = euler.y * ROT_SCALE;
+                        dyaw = euler.z * ROT_SCALE;
+                    }
+                    state.controllers[handedness].lastPose = {
+                        position: new THREE.Vector3().copy(currPos),
+                        orientation: new THREE.Quaternion(currRot.x, currRot.y, currRot.z, currRot.w)
+                    };
+                }
+            } else {
+                state.controllers[handedness].lastPose = null;
+                
+                // 2. JOYSTICK (only if clutch not pressed)
+                const ax_x = axes[2] || 0;
+                const ax_y = axes[3] || 0;
+                const deadzone = 0.1;
+                const speed_scale = 0.02;
+
+                if (Math.abs(ax_y) > deadzone) dx = -ax_y * speed_scale;
+                if (Math.abs(ax_x) > deadzone) dy = -ax_x * speed_scale;
+                
+                // A/B for Right, X/Y for Left
+                if (handedness === 'right') {
+                    if (buttons[5] && buttons[5].pressed) dz = speed_scale; // B -> Up
+                    if (buttons[4] && buttons[4].pressed) dz = -speed_scale; // A -> Down
+                } else {
+                    if (buttons[5] && buttons[5].pressed) dz = speed_scale; // Y -> Up
+                    if (buttons[4] && buttons[4].pressed) dz = -speed_scale; // X -> Down
+                }
+            }
+            
+            // 3. COMMON INPUTS
+            if (buttons[0]) gripper = buttons[0].value;
+
+            // 4. SYSTEM CONTROLS (B Button - Exit)
+            if (handedness === 'right' && buttons[5] && buttons[5].pressed) {
+                if (!state.exitTimer) state.exitTimer = Date.now();
+                else if (Date.now() - state.exitTimer > 1000) { exitVR(); state.exitTimer = null; }
+            } else if (handedness === 'right') {
+                state.exitTimer = null;
+            }
+
+            // Update Teleop Client with handedness
+            if (isClutchPressed) {
+                window.teleopClient.accumulateVRMotion({ dx, dy, dz, droll, dpitch, dyaw }, handedness);
+                window.teleopClient.updateVRInput({ dx: 0, dy: 0, dz: 0, droll: 0, dpitch: 0, dyaw: 0, gripper, reference_frame: 'base' }, handedness);
+            } else {
+                window.teleopClient.updateVRInput({ dx, dy, dz, droll, dpitch, dyaw, gripper, reference_frame: 'end_effector' }, handedness);
+            }
+        }
+        
+        renderer.render(scene, camera);
+      }
+      
+      // ========================================
+      // CONTROLS & CALIBRATION
+      // ========================================
+      
+      function calibrateControllers() {
+        alert('Calibration - To be implemented');
+        // TODO: Implement controller calibration
+      }
+      
+      // ========================================
+      // UTILITIES
+      // ========================================
+      
+      function updateStatus(elementId, text, className) {
+        const el = $(elementId);
+        if (el) {
+          const pill = el.querySelector('.pill') || el;
+          pill.textContent = text;
+          pill.className = `pill ${className}`;
+        }
+      }
+      
+      function disconnect() {
+        if (window.teleopClient) {
+          window.teleopClient.disconnect();
+        }
+        if (state.xrSession) {
+          state.xrSession.end();
+        }
+        
+        state.connected = false;
+        state.token = null;
+        
+        loginSection.classList.remove('hidden');
+        vrSection.classList.add('hidden');
+        updateStatus('server-status', 'Disconnected', 'warn');
+        
+        console.log('[VR] Disconnected');
+      }
+      
+      // ========================================
+      // START
+      // ========================================
+      
+      // Basic fallback to ensure UI works even if module fails
+      if (!$('btn-connect').onclick && !$('btn-connect').dataset.listenerAttached) {
+          $('btn-connect').onclick = () => {
+              if (typeof connectToServer === 'undefined') {
+                  alert('System Error: Application script failed to load. Please refresh.');
+              }
+          };
+      }
+
+      window.addEventListener('load', init);
+      
+    </script>
+  </body>
+</html>

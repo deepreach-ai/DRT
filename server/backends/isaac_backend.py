@@ -5,12 +5,13 @@ import threading
 import socket
 import json
 import logging
-# Fix import for Docker environment
-try:
-    from server.robot_backend import RobotBackend, BackendStatus
-except ImportError:
-    # Fallback for when running from within the server package
-    from ..robot_backend import RobotBackend, BackendStatus
+import sys
+import os
+
+# Add project root to path if needed
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
+
+from server.robot_backend import RobotBackend, BackendStatus
 
 logger = logging.getLogger(__name__)
 

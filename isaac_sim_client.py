@@ -17,7 +17,16 @@ args, unknown = parser.parse_known_args()
 
 # 2. Start SimulationApp
 from omni.isaac.kit import SimulationApp
-simulation_app = SimulationApp({"headless": args.headless})
+config = {"headless": args.headless}
+if args.headless:
+    config["width"] = 1280
+    config["height"] = 720
+    config["renderer"] = "RayTracedLighting"
+    # Enable WebRTC Livestreaming
+    config["enable_livestream"] = True
+    config["livestream_type"] = "webrtc"
+
+simulation_app = SimulationApp(config)
 
 # 3. Import Isaac Core (must be after SimulationApp)
 from omni.isaac.core import World
@@ -119,6 +128,11 @@ class IsaacSimTCPClient:
         net_thread.start()
         
         print("Starting simulation loop...")
+        
+        # Enable camera for livestream
+        if self.world:
+            self.world.reset()
+
         while simulation_app.is_running():
             self.world.step(render=True)
             if self.running and self.controller:

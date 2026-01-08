@@ -1,64 +1,130 @@
-# Cloud-Native Robot Teleoperation System
+# Cloud-Based Robot Teleoperation Platform (Simulation Only)
 
-## Description
-
-A modular teleoperation system designed for low-latency end-effector control. It decouples client input from robot hardware/simulation via a safety-aware middleware server, deployed on AWS G5 instances.
+## Overview
+This project implements a cloud-native teleoperation system that allows a remote client to control a robot arm (Franka Emika Panda) in NVIDIA Isaac Sim. The system is designed with a clean separation of concerns, safety mechanisms, and cloud-ready architecture.
 
 ## System Architecture
 
+The system consists of three main components:
+
+1. **Teleoperation Server (Core)**: A FastAPI-based server that handles client commands, enforces safety/velocity limits, and manages the robot backend.
+2. **Robot Backend**: An abstraction layer that communicates with the physical robot or simulation. Currently implements `IsaacSimBackend` (via TCP) and `MockBackend`.
+3. **Client**: A Python-based keyboard client that sends incremental delta commands.
+
 ```mermaid
-graph LR
-    A[Keyboard Client] -- Delta Commands (REST/WS) --> B[AWS Teleop Server]
-    B -- Safety Gating & Integration --> C[Robot Backend Interface]
-    C --> D[Isaac Sim Backend]
-    C --> E[Mock/Stub Backend]
+graph TD
+    Client[Keyboard Client] -->|HTTP POST /command| Server[Teleop Server]
+    
+    subgraph "Teleoperation Server (AWS EC2)"
+        Server -->|Validate| Safety[Safety Gate & Limits]
+        Safety -->|Update| Controller[Control Logic]
+        Controller -->|Target Pose| Backend{Backend Interface}
+    end
+    
+    Backend -->|TCP Socket| Isaac[Isaac Sim App]
+    Backend -.->|Interface| RealRobot[Real Robot Driver]
+    
+    subgraph "Isaac Sim (Container)"
+        Isaac -->|USD/PhysX| Sim[Physics Simulation]
+        Sim -->|Native Stream| User[User View]
+    end
 ```
 
-### Key Abstractions
+## Features
 
-- **Command Integrator**: Converts relative user input (Δx) into absolute workspace coordinates.
-- **Backend Interface**: An abstract base class that allows hot-swapping between the high-fidelity Isaac Sim and a lightweight mock for unit testing.
-- **Safety Monitor**: A middleware layer that enforces workspace bounds and velocity limits before commands reach the hardware.
+- **Incremental Control**: Users control the robot via delta commands (dx, dy, droll, etc.) rather than absolute poses.
+- **Safety First**:
+  - **Deadman Switch**: Commands must be sent continuously (heartbeat). If no command is received for 0.5s, the robot stops.
+  - **Velocity Limiting**: Commands are clamped to safe linear and angular velocities.
+  - **Workspace Limits**: The robot is constrained to a safe 3D bounding box.
+- **Backend Abstraction**: The server is agnostic to the robot implementation. Switching to a real robot only requires implementing a new `RobotBackend` subclass.
+- **Cloud Native**: Fully containerized using Docker and Docker Compose, ready for AWS deployment.
+- **Livestreaming**: Supports NVIDIA Omniverse Native Streaming for high-performance remote visualization.
 
-## Robotics Fundamentals
+## Directory Structure
 
-### Coordinate Frames
-Commands are processed in the World Frame.
+```
+teleop_system/
+├── client/                 # Client applications
+│   └── keyboard_client.py  # Minimal keyboard teleop client
+├── server/                 # Teleoperation Server (Core)
+│   ├── backends/           # Robot backend implementations
+│   │   ├── isaac_backend.py
+│   │   └── mock_backend.py
+│   ├── teleop_server.py    # FastAPI entry point
+│   ├── control_logic.py    # Kinematics and limit logic
+│   ├── safety_gate.py      # Deadman switch and velocity limits
+│   ├── robot_backend.py    # Abstract base class
+│   └── models.py           # Pydantic data models
+├── deployment/             # Infrastructure as Code
+│   ├── docker-compose.full.yml
+│   └── deploy_remote.sh
+├── isaac_sim_client.py     # Isaac Sim standalone script
+└── requirements.txt
+```
 
-### Safety
-- **Deadman Switch**: Server-side timeout to ensure safety.
-- **Workspace Clamping**: Prevents the robot from hitting the floor or self-colliding.
-
-### Control
-Uses Differential IK or a simple Pose-to-Pose controller within Isaac Sim.
-
-## Deployment Instructions (AWS)
+## Getting Started
 
 ### Prerequisites
-- AWS Account with g5.2xlarge or g4dn.xlarge limit increase.
-- NVIDIA Driver & Docker installed (or use the provided `ec2_setup.sh`).
+- Docker & Docker Compose
+- NVIDIA GPU with Drivers (for Isaac Sim)
+- Python 3.8+
 
-### Steps
-1. **Launch Instance**: Use the "NVIDIA Omniverse" AMI.
-2. **Clone & Build**:
+### Running Locally
+
+1. **Start the System**:
    ```bash
-   git clone <your-repo>
-   docker-compose up --build
+   # Start Server and Isaac Sim
+   docker-compose -f deployment/docker-compose.full.yml up -d
    ```
-3. **Run Isaac Sim**: (Provide the specific command or script path).
-4. **Connect Client**:
+
+2. **Connect Client**:
    ```bash
-   python3 client/keyboard_client.py --ip <EC2_PUBLIC_IP>
+   # Install client dependencies
+   pip install requests
+
+   # Run keyboard client
+   python client/keyboard_client.py
    ```
+
+3. **View Simulation**:
+   - Use **Omniverse Streaming Client** to connect to `localhost`.
+
+### Controls
+
+- **W/S**: Up/Down (Z)
+- **A/D**: Left/Right (X)
+- **Q/E**: Forward/Backward (Y)
+- **I/K**: Pitch
+- **J/L**: Yaw
+- **U/O**: Roll
+- **1**: Force Activate Safety
+- **R**: Reset
+
+## AWS Deployment
+
+1. **Launch EC2 Instance**:
+   - Instance Type: `g4dn.xlarge` (or better)
+   - AMI: Ubuntu 22.04 Deep Learning AMI
+   - Security Group: Allow TCP 8000 (API), 49100 (Stream Signal), 47998 (Stream Video).
+
+2. **Deploy**:
+   ```bash
+   # SSH into instance
+   ssh -i key.pem ubuntu@<IP>
+
+   # Clone repo
+   git clone <repo_url>
+   cd teleop_system
+
+   # Run deployment script
+   bash deployment/deploy_remote.sh
+   ```
+
+3. **Connect**:
+   - Use Omniverse Streaming Client to connect to `<EC2_Public_IP>`.
+   - Run `client/keyboard_client.py --url http://<EC2_Public_IP>:8000`.
 
 ## Design Notes & Tradeoffs
 
-- **Why Delta Control?** Chosen to prevent the robot from 'teleporting' if a high-latency absolute command arrived late.
-- **Why FastAPI/WebSockets?** Offers a balance between development speed and the low overhead required for 30Hz control loops.
-- **Handling Ambiguity**: Standardized the backend to a 6-DOF UR10, but the `RobotBackend` class allows easy migration to any Franka or KUKA model.
-
-## Future Improvements
-
-- **Latency**: Implement Jitter Buffering or Client-Side Prediction.
-- **Security**: Add JWT authentication for the Control API.
-- **Production**: Move from EC2 to AWS RoboMaker for managed simulation scaling.
+See [DESIGN.md](DESIGN.md) for detailed architectural decisions and future improvements.

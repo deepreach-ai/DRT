@@ -1,0 +1,79 @@
+version: "3.8"
+
+services:
+  # Teleoperation Server
+  teleop-server:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile
+    environment:
+      - TELEOP_BACKEND=${TELEOP_BACKEND:-isaac}
+      - TELEOP_ISAAC_HOST=0.0.0.0
+      - TELEOP_ISAAC_PORT=9000
+    ports:
+      - "8000:8000"
+      - "9000:9000"
+    restart: unless-stopped
+    networks:
+      - teleop-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Isaac Sim Client
+  isaac-sim:
+    image: nvcr.io/nvidia/isaac-sim:4.0.0
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - ISAAC_SIM_HOST=teleop-server
+      - ISAAC_SIM_PORT=9000
+    volumes:
+      - ../isaac_sim_client.py:/workspace/isaac_sim_client.py:ro
+      - ../server:/workspace/server:ro
+      - isaac-cache-kit:/isaac-sim/kit/cache
+      - isaac-cache-ov:/root/.cache/ov
+      - isaac-cache-pip:/root/.cache/pip
+      - isaac-cache-glcache:/root/.cache/nvidia/GLCache
+      - isaac-cache-compute:/root/.nv/ComputeCache
+      - isaac-logs:/root/.nvidia-omniverse/logs
+      - isaac-data:/root/.local/share/ov/data
+    command: >
+      bash -c "
+      echo 'Waiting for teleop-server to be ready...' &&
+      sleep 10 &&
+      echo 'Starting Isaac Sim client...' &&
+      python /workspace/isaac_sim_client.py 
+        --host teleop-server 
+        --port 9000 
+        --robot_usd Franka/franka.usd 
+        --ee_frame panda_hand
+      "
+    depends_on:
+      - teleop-server
+    networks:
+      - teleop-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+
+networks:
+  teleop-network:
+    driver: bridge
+
+volumes:
+  isaac-cache-kit:
+  isaac-cache-ov:
+  isaac-cache-pip:
+  isaac-cache-glcache:
+  isaac-cache-compute:
+  isaac-logs:
+  isaac-data:

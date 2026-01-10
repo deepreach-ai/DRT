@@ -1,0 +1,7 @@
+# Virtual Environment
+.venv/
+venv/
+env/
+
+# Internal Documents
+trae/documents

@@ -157,16 +157,26 @@ def render_status_frame(width: int, height: int, state: Dict[str, Any]) -> bytes
     return buf.getvalue()
 
 
-async def mjpeg_stream(get_state_fn, fps: int = 10):
+async def mjpeg_stream(get_state_fn=None, fps: int = 10, get_frame_fn=None):
     delay = 1.0 / max(1, fps)
     boundary = b"frame"
     while True:
-        state = get_state_fn()
-        jpg = render_status_frame(960, 540, state)
-        headers = (
-            b"--" + boundary + b"\r\n"
-            b"Content-Type: image/jpeg\r\n"
-            + f"Content-Length: {len(jpg)}\r\n\r\n".encode("utf-8")
-        )
-        yield headers + jpg + b"\r\n"
+        jpg = None
+        if get_frame_fn:
+            try:
+                jpg = get_frame_fn()
+            except Exception:
+                pass
+        
+        if jpg is None and get_state_fn:
+            state = get_state_fn()
+            jpg = render_status_frame(960, 540, state)
+            
+        if jpg:
+            headers = (
+                b"--" + boundary + b"\r\n"
+                b"Content-Type: image/jpeg\r\n"
+                + f"Content-Length: {len(jpg)}\r\n\r\n".encode("utf-8")
+            )
+            yield headers + jpg + b"\r\n"
         await asyncio.sleep(delay)

@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
+from PIL import Image
 from transforms3d import quaternions
 
 from robot_backend import BackendStatus, RobotBackend
@@ -69,6 +70,7 @@ def _so3_log_small_angle(r_err: np.ndarray) -> np.ndarray:
 class MujocoBackendConfig:
     xml_path: Optional[str] = None
     ee_site: Optional[str] = None
+    camera: Optional[str] = None
     ik_damping: float = 0.05
     ik_max_iters: int = 25
     ik_pos_weight: float = 1.0
@@ -82,6 +84,7 @@ class MujocoRobotBackend(RobotBackend):
         name: str = "mujoco_robot",
         xml_path: Optional[str] = None,
         ee_site: Optional[str] = None,
+        camera: Optional[str] = None,
         ik_damping: float = 0.05,
         ik_max_iters: int = 25,
         ik_pos_weight: float = 1.0,
@@ -92,6 +95,7 @@ class MujocoRobotBackend(RobotBackend):
         self._cfg = MujocoBackendConfig(
             xml_path=xml_path,
             ee_site=ee_site,
+            camera=camera,
             ik_damping=ik_damping,
             ik_max_iters=ik_max_iters,
             ik_pos_weight=ik_pos_weight,
@@ -102,9 +106,11 @@ class MujocoRobotBackend(RobotBackend):
         self._model: Any = None
         self._data: Any = None
         self._ee_site_id: Optional[int] = None
+        self._default_camera: int | str = "world_cam"
         self._last_target_pos = np.array([0.0, 0.0, 0.5], dtype=float)
         self._last_target_quat = np.array([1.0, 0.0, 0.0, 0.0], dtype=float)
         self._command_count = 0
+        self._renderer = None
 
     def connect(self) -> bool:
         if mujoco is None:
@@ -114,6 +120,7 @@ class MujocoRobotBackend(RobotBackend):
         self.status = BackendStatus.CONNECTING
         xml_path = self._cfg.xml_path or os.getenv("TELEOP_MUJOCO_XML")
         ee_site = self._cfg.ee_site or os.getenv("TELEOP_MUJOCO_EE_SITE")
+        preferred_camera = self._cfg.camera or os.getenv("TELEOP_MUJOCO_CAMERA")
         if not ee_site:
             ee_site = "ee"
 
@@ -133,12 +140,22 @@ class MujocoRobotBackend(RobotBackend):
             self.status = BackendStatus.ERROR
             raise RuntimeError("Could not resolve end-effector site. Set TELEOP_MUJOCO_EE_SITE.")
 
+        self._default_camera = self._resolve_camera(preferred=preferred_camera)
+
         self.status = BackendStatus.CONNECTED
         self.last_update_time = time.time()
         return True
 
     def disconnect(self):
         self.status = BackendStatus.DISCONNECTED
+        if self._renderer is not None:
+            try:
+                if hasattr(self._renderer, 'close'):
+                    self._renderer.close()
+            except Exception as e:
+                print(f"[MuJoCo] Warning: Error closing renderer: {e}")
+            finally:
+                self._renderer = None
         self._model = None
         self._data = None
         self._ee_site_id = None
@@ -167,6 +184,124 @@ class MujocoRobotBackend(RobotBackend):
             pos, quat = self._get_site_pose(self._ee_site_id)
             return pos.copy(), quat.copy()
 
+    def render(self, width: int = 960, height: int = 540, camera: Optional[str] = None) -> Optional[bytes]:
+        """Render a frame from the simulation.
+        
+        On macOS, the standard Renderer may fail due to OpenGL context issues.
+        This implementation falls back to a placeholder if rendering fails.
+        """
+        if not self.is_connected() or self._model is None or self._data is None:
+            return None
+
+        camera_arg: int | str
+        if camera is None:
+            camera_arg = self._default_camera
+        else:
+            camera_arg = self._resolve_camera(preferred=camera)
+        
+        try:
+            with self.update_lock:
+                # Try to create renderer if it doesn't exist
+                if self._renderer is None:
+                    try:
+                        self._renderer = mujoco.Renderer(self._model, height, width)
+                    except Exception as e:
+                        print(f"[MuJoCo] Renderer creation failed: {e}")
+                        print("[MuJoCo] Falling back to placeholder rendering")
+                        return self._render_placeholder(width, height)
+                
+                # Try to render
+                try:
+                    self._renderer.update_scene(self._data, camera=camera_arg)
+                    img_arr = self._renderer.render()
+                except Exception as e:
+                    print(f"[MuJoCo] Rendering failed: {e}")
+                    print("[MuJoCo] Attempting to recreate renderer...")
+                    # Try to close and recreate renderer
+                    try:
+                        if hasattr(self._renderer, 'close'):
+                            self._renderer.close()
+                    except:
+                        pass
+                    self._renderer = None
+                    return self._render_placeholder(width, height)
+            
+            # Convert to JPEG
+            img = Image.fromarray(img_arr)
+            from io import BytesIO
+            buf = BytesIO()
+            img.save(buf, format="JPEG", quality=75)
+            return buf.getvalue()
+            
+        except Exception as e:
+            print(f"[MuJoCo] Unexpected rendering error: {e}")
+            return self._render_placeholder(width, height)
+    
+    def _render_placeholder(self, width: int, height: int) -> bytes:
+        """Generate a placeholder frame with simulation state info."""
+        from io import BytesIO
+        import numpy as np
+        from PIL import Image, ImageDraw, ImageFont
+        
+        # Create dark background
+        img = Image.new('RGB', (width, height), color=(15, 20, 30))
+        draw = ImageDraw.Draw(img)
+        
+        # Get current pose
+        pos, quat = self.get_current_pose()
+        
+        # Draw info text
+        try:
+            font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 24)
+            small_font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 16)
+        except:
+            font = ImageFont.load_default()
+            small_font = font
+        
+        # Title
+        draw.text((20, 20), "MuJoCo Simulation (Headless Mode)", fill=(200, 220, 255), font=font)
+        
+        # Status
+        y_offset = 60
+        draw.text((20, y_offset), "Status: Running", fill=(100, 255, 150), font=small_font)
+        
+        # Position
+        y_offset += 30
+        if pos is not None:
+            draw.text((20, y_offset), f"Position: [{pos[0]:.3f}, {pos[1]:.3f}, {pos[2]:.3f}]", 
+                     fill=(150, 200, 255), font=small_font)
+        
+        # Orientation
+        y_offset += 25
+        if quat is not None:
+            draw.text((20, y_offset), f"Orientation: [{quat[0]:.3f}, {quat[1]:.3f}, {quat[2]:.3f}, {quat[3]:.3f}]", 
+                     fill=(150, 200, 255), font=small_font)
+        
+        # Joint positions
+        y_offset += 35
+        draw.text((20, y_offset), "Joint Positions:", fill=(200, 200, 200), font=small_font)
+        y_offset += 25
+        if self._data is not None and hasattr(self._data, 'qpos'):
+            for i, q in enumerate(self._data.qpos[:6]):  # Show first 6 joints
+                draw.text((40, y_offset + i*20), f"Joint {i+1}: {q:.3f} rad", 
+                         fill=(180, 180, 180), font=small_font)
+        
+        # Note about rendering
+        y_offset = height - 100
+        draw.text((20, y_offset), "⚠ Note: OpenGL rendering unavailable on this system", 
+                 fill=(255, 200, 100), font=small_font)
+        y_offset += 25
+        draw.text((20, y_offset), "Simulation is running correctly - visualization only affected", 
+                 fill=(200, 200, 200), font=small_font)
+        y_offset += 25
+        draw.text((20, y_offset), "Try: mjpython or Linux/Windows for 3D visualization", 
+                 fill=(150, 150, 150), font=small_font)
+        
+        # Convert to JPEG
+        buf = BytesIO()
+        img.save(buf, format="JPEG", quality=85)
+        return buf.getvalue()
+
     def get_status(self) -> Dict[str, Any]:
         pos, quat = (None, None)
         if self.is_connected() and self._ee_site_id is not None:
@@ -177,6 +312,7 @@ class MujocoRobotBackend(RobotBackend):
             "backend": "mujoco",
             "command_count": self._command_count,
             "ee_site": int(self._ee_site_id) if self._ee_site_id is not None else None,
+            "camera": str(self._default_camera),
             "current_position": pos.tolist() if pos is not None else None,
             "current_orientation": quat.tolist() if quat is not None else None,
             "target_position": self._last_target_pos.tolist(),
@@ -203,6 +339,34 @@ class MujocoRobotBackend(RobotBackend):
         if getattr(self._model, "nsite", 0) > 0:
             return 0
         return None
+
+    def _resolve_camera(self, preferred: Optional[str]) -> int | str:
+        if self._model is None:
+            return "world_cam"
+
+        def try_name(name: str) -> Optional[str]:
+            try:
+                idx = mujoco.mj_name2id(self._model, mujoco.mjtObj.mjOBJ_CAMERA, name)
+            except Exception:
+                return None
+            if int(idx) != -1:
+                return name
+            return None
+
+        if preferred:
+            resolved = try_name(preferred)
+            if resolved is not None:
+                return resolved
+
+        resolved = try_name("world_cam")
+        if resolved is not None:
+            return resolved
+
+        ncam = int(getattr(self._model, "ncam", 0) or 0)
+        if ncam > 0:
+            return 0
+
+        return -1
 
     def _get_site_pose(self, site_id: int) -> Tuple[np.ndarray, np.ndarray]:
         pos = np.array(self._data.site_xpos[site_id], dtype=float)
@@ -268,4 +432,3 @@ class MujocoRobotBackend(RobotBackend):
             lo = float(model.jnt_range[j, 0])
             hi = float(model.jnt_range[j, 1])
             data.qpos[adr] = float(np.clip(data.qpos[adr], lo, hi))
-

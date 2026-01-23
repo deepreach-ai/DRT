@@ -337,7 +337,17 @@ async def websocket_endpoint(websocket: WebSocket):
             }
             await websocket.send_json(payload)
             _recorder.write(session_id, {"type": "state", "ts": payload["ts"], "payload": payload})
-            jpg = render_status_frame(960, 540, state)
+            
+            jpg = None
+            if hasattr(server.backend, "render"):
+                try:
+                    jpg = server.backend.render(width=960, height=540)
+                except Exception:
+                    pass
+            
+            if jpg is None:
+                jpg = render_status_frame(960, 540, state)
+                
             _recorder.save_frame(session_id, jpg)
             await asyncio.sleep(0.05)
 
@@ -418,8 +428,13 @@ async def video_mjpeg(token: str):
             "timestamp": time.time(),
         }
 
+    def get_frame():
+        if hasattr(server.backend, "render"):
+            return server.backend.render(width=960, height=540)
+        return None
+
     return StreamingResponse(
-        mjpeg_stream(get_state_fn=get_state, fps=10),
+        mjpeg_stream(get_state_fn=get_state, fps=10, get_frame_fn=get_frame),
         media_type="multipart/x-mixed-replace; boundary=frame",
     )
 

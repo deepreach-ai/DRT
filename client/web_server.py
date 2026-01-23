@@ -32,4 +32,4 @@ if __name__ == "__main__":
     print(f"Starting Web UI server...")
     print(f"Web directory: {web_dir}")
     print(f"Open browser to: http://localhost:8080")
-    uvicorn.run(web_app, host="0.0.0.0", port=8080)
+    uvicorn.run(web_app, host="0.0.0.0", port=8011)

@@ -16,7 +16,7 @@ from datetime import datetime
 import json
 import os
 
-from models import DeltaCommand, RobotState, TeleopStatus, WorkspaceLimits
+from models import DeltaCommand, JointCommand, RobotState, TeleopStatus, WorkspaceLimits
 from safety_gate import SafetyGate
 from control_logic import TeleoperationController
 from robot_backend import RobotBackend, BackendFactory, BackendStatus
@@ -136,6 +136,25 @@ class TeleoperationServer:
             'target_orientation': target_orientation.tolist()
         }
     
+    def process_joint_command(self, command: JointCommand) -> Dict[str, Any]:
+        """
+        Process a direct joint command
+        """
+        if self.backend and self.backend.is_connected():
+            success = self.backend.send_joint_positions(np.array(command.joints))
+            
+            if not success:
+                return {
+                    'status': 'error',
+                    'message': 'Failed to send joint command',
+                }
+        
+        self.total_commands += 1
+        return {
+            'status': 'success',
+            'message': 'Joint command processed',
+        }
+
     def get_status(self) -> TeleopStatus:
         """Get current server status"""
         safety_active = self.safety_gate.is_active()
@@ -357,19 +376,34 @@ async def websocket_endpoint(websocket: WebSocket):
         while True:
             data = await websocket.receive_text()
             msg = json.loads(data)
-            if isinstance(msg, dict) and msg.get("type") == "delta":
-                command_dict = msg.get("payload") or {}
+            
+            # Handle different message types
+            if isinstance(msg, dict):
+                msg_type = msg.get("type", "delta")
+                command_dict = msg.get("payload", {})
             else:
+                msg_type = "delta"
                 command_dict = msg
 
-            command = DeltaCommand(**command_dict)
+            result = {}
             current_time = time.time()
-            if command.timestamp <= 0:
-                command.timestamp = current_time
 
-            result = server.process_command(command)
+            if msg_type == "delta":
+                command = DeltaCommand(**command_dict)
+                if command.timestamp <= 0:
+                    command.timestamp = current_time
+                result = server.process_command(command)
+                
+            elif msg_type == "joint":
+                command = JointCommand(**command_dict)
+                if command.timestamp <= 0:
+                    command.timestamp = current_time
+                result = server.process_joint_command(command)
+
             ack = {"type": "ack", "ts": time.time(), "result": result}
             await websocket.send_json(ack)
+            # Optional: Don't record high-frequency joint commands to avoid log spam? 
+            # Or record them for replay. Let's record.
             _recorder.write(session_id, {"type": "command", "ts": ack["ts"], "command": command_dict, "result": result})
 
     except WebSocketDisconnect:

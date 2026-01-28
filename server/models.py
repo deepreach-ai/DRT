@@ -30,6 +30,13 @@ class DeltaCommand(BaseModel):
     client_id: str = "default"
 
 
+class JointCommand(BaseModel):
+    """Direct joint position command"""
+    joints: List[float]  # Array of joint angles/values
+    timestamp: float = 0.0
+    client_id: str = "default"
+
+
 class RobotState(BaseModel):
     """Current robot state"""
     position: Tuple[float, float, float]  # x, y, z in world frame

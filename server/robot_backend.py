@@ -102,5 +102,11 @@ class BackendFactory:
             name = kwargs.pop('name', 'mujoco_robot')
             return MujocoRobotBackend(name=name, **kwargs)
             
+        elif backend_type.lower() == 'soarm' or backend_type.lower() == 'so101':
+            from backends.soarm_backend import SOARMBackend
+            port = kwargs.get('port', '/dev/tty.usbmodem5B3E1187881')
+            name = kwargs.get('name', 'so_arm')
+            return SOARMBackend(port=port, name=name)
+            
         else:
             raise ValueError(f"Unknown backend type: {backend_type}")

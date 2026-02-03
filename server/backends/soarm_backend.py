@@ -166,8 +166,7 @@ class SOARMBackend(RobotBackend):
         self.command_count = 0
         
         # Camera state
-        self.pipeline = None
-        self.camera_config = None
+        self.cameras = {}  # Dict of {name: {'type': str, 'obj': object, 'frame': np.ndarray}}
         self.camera_started = False
         
         if not LEROBOT_AVAILABLE:
@@ -192,45 +191,58 @@ class SOARMBackend(RobotBackend):
             self.robot.connect()
             print(f"[SOARMBackend] ✓ Connected to SO-ARM")
 
-            # 2. Connect to Camera
-            # Prioritize RealSense, fallback to OpenCV webcam if RealSense fails
-            self.camera_type = "none"
+            # 2. Connect to Cameras
+            # We want: Top + 2 Side (All via OpenCV since pyrealsense2 crashes)
+            print("[SOARMBackend] Initializing cameras (using OpenCV for all)...")
+            self.cameras = {}
             
-            # Try RealSense first
-            # WARNING: pyrealsense2 on macOS arm64 is unstable and causes segfaults
-            # We will default to OpenCV for stability unless explicitly forced
-            USE_REALSENSE = False # Set to True only if you are sure it works
+            # Disable pyrealsense2 usage to avoid segfault
+            # if REALSENSE_AVAILABLE: ... 
             
-            if REALSENSE_AVAILABLE and USE_REALSENSE:
-                try:
-                    print("[SOARMBackend] Initializing RealSense camera...")
-                    self.pipeline = rs.pipeline()
-                    self.camera_config = rs.config()
-                    self.camera_config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
-                    self.pipeline.start(self.camera_config)
-                    self.camera_started = True
-                    self.camera_type = "realsense"
-                    print("[SOARMBackend] ✓ RealSense camera started")
-                except Exception as e:
-                    print(f"[SOARMBackend] ⚠ Warning: Failed to start RealSense: {e}")
-                    self.pipeline = None
+            if OPENCV_AVAILABLE:
+                print("[SOARMBackend] Scanning for cameras (skipping ID 0)...")
+                
+                # We expect 3 cameras: Side 1, Side 2, Top
+                # We scan ID 1..10
+                
+                found_count = 0
+                # Mapping found index to role
+                # 0 -> Side 1
+                # 1 -> Side 2
+                # 2 -> Top
+                roles = ["side_1", "side_2", "top"]
+                
+                for i in range(1, 10):
+                    if found_count >= len(roles):
+                        break
+                        
+                    try:
+                        cap = cv2.VideoCapture(i)
+                        if cap.isOpened():
+                            # Try to read a frame to verify
+                            ret, frame = cap.read()
+                            if ret:
+                                role = roles[found_count]
+                                self.cameras[role] = {'type': 'opencv', 'obj': cap}
+                                print(f"[SOARMBackend] ✓ Found {role} at ID {i}")
+                                found_count += 1
+                            else:
+                                cap.release()
+                        else:
+                            cap.release()
+                    except Exception as e:
+                        print(f"[SOARMBackend] ⚠ Error checking camera {i}: {e}")
+
+                if found_count == 0:
+                    print("[SOARMBackend] ⚠ No external cameras found")
+                elif found_count < len(roles):
+                    print(f"[SOARMBackend] ⚠ Only found {found_count} cameras (expected {len(roles)})")
+
+            if self.cameras:
+                self.camera_started = True
+                print(f"[SOARMBackend] Total cameras initialized: {len(self.cameras)}")
             else:
-                if REALSENSE_AVAILABLE:
-                    print("[SOARMBackend] ℹ RealSense disabled for stability (segfault protection). Using OpenCV fallback.")
-            
-            # If RealSense failed, try OpenCV webcam
-            if not self.camera_started and OPENCV_AVAILABLE:
-                try:
-                    print("[SOARMBackend] Trying fallback to OpenCV webcam (ID 0)...")
-                    self.cap = cv2.VideoCapture(0)
-                    if self.cap.isOpened():
-                        self.camera_started = True
-                        self.camera_type = "opencv"
-                        print("[SOARMBackend] ✓ OpenCV webcam started")
-                    else:
-                        print("[SOARMBackend] ⚠ Failed to open webcam 0")
-                except Exception as e:
-                    print(f"[SOARMBackend] ⚠ Error opening webcam: {e}")
+                print("[SOARMBackend] ⚠ No cameras initialized")
             
             self.status = BackendStatus.CONNECTED
             self.last_update_time = time.time()
@@ -246,26 +258,20 @@ class SOARMBackend(RobotBackend):
         try:
             print(f"[SOARMBackend] Disconnecting...")
             
-            # Stop Camera
-            if self.camera_started:
-                if getattr(self, 'pipeline', None):
+            # Stop Cameras
+            if self.cameras:
+                for name, cam in self.cameras.items():
                     try:
-                        self.pipeline.stop()
-                        print("[SOARMBackend] RealSense camera stopped")
+                        if cam['type'] == 'realsense':
+                            cam['obj'].stop()
+                            print(f"[SOARMBackend] Stopped {name} (RealSense)")
+                        elif cam['type'] == 'opencv':
+                            cam['obj'].release()
+                            print(f"[SOARMBackend] Stopped {name} (OpenCV)")
                     except Exception as e:
-                        print(f"[SOARMBackend] Error stopping RealSense: {e}")
-                    self.pipeline = None
-                
-                if getattr(self, 'cap', None):
-                    try:
-                        self.cap.release()
-                        print("[SOARMBackend] OpenCV webcam stopped")
-                    except Exception as e:
-                        print(f"[SOARMBackend] Error stopping OpenCV webcam: {e}")
-                    self.cap = None
-                
+                        print(f"[SOARMBackend] Error stopping {name}: {e}")
+                self.cameras = {}
                 self.camera_started = False
-                self.camera_type = "none"
 
             # Disconnect Robot
             if self.robot is not None:
@@ -280,70 +286,101 @@ class SOARMBackend(RobotBackend):
             self.status = BackendStatus.ERROR
     
     def render(self, width: int = 960, height: int = 540) -> Optional[bytes]:
-        """Render a frame from camera"""
-        if not self.camera_started:
+        """Render a combined frame from all cameras"""
+        if not self.camera_started or not self.cameras:
             return None
             
         try:
-            img = None
+            # Capture frames
+            frames = {}
             
-            # Case 1: RealSense
-            if self.camera_type == "realsense" and self.pipeline:
-                frames = self.pipeline.wait_for_frames(timeout_ms=100)
-                color_frame = frames.get_color_frame()
-                if color_frame:
-                    img = np.asanyarray(color_frame.get_data())
+            # Capture All (OpenCV)
+            for name, cam in self.cameras.items():
+                if cam['type'] == 'opencv':
+                    try:
+                        ret, frame = cam['obj'].read()
+                        if ret:
+                            frames[name] = frame
+                    except Exception:
+                        pass
+                elif cam['type'] == 'realsense':
+                    # Legacy support if we ever re-enable it
+                    try:
+                        pipeline = cam['obj']
+                        fs = pipeline.wait_for_frames(timeout_ms=100)
+                        color_frame = fs.get_color_frame()
+                        if color_frame:
+                            frames[name] = np.asanyarray(color_frame.get_data())
+                    except Exception:
+                        pass
             
-            # Case 2: OpenCV Webcam
-            elif self.camera_type == "opencv" and self.cap:
-                ret, frame = self.cap.read()
-                if ret:
-                    img = frame
-            
-            if img is None:
+            if not frames:
                 return None
-            
-            # Resize if needed (RealSense is 640x480, target usually 960x540)
-            # Use OpenCV for resizing and encoding
-            if OPENCV_AVAILABLE:
-                if img.shape[1] != width or img.shape[0] != height:
-                    img = cv2.resize(img, (width, height))
                 
-                # Encode to JPEG
-                _, jpeg = cv2.imencode('.jpg', img)
-                return jpeg.tobytes()
-            else:
-                # Fallback to PIL if OpenCV is not available
-                try:
-                    from PIL import Image
-                    from io import BytesIO
+            # Stitch logic
+            # Target layout: [Side 1] [Top] [Side 2]
+            # If some are missing, just show what we have
+            
+            if OPENCV_AVAILABLE:
+                # Create canvas
+                canvas = np.zeros((height, width, 3), dtype=np.uint8)
+                
+                # Determine slots
+                # We split width into 3 parts: 0-320, 320-640, 640-960
+                slot_width = width // 3
+                
+                # Helper to place image
+                def place_image(img, slot_idx, label=None):
+                    if img is None: return
                     
-                    # RealSense/OpenCV typically BGR for OpenCV processing
-                    # If we use PIL, we need to convert BGR to RGB
+                    # Resize to fit slot width, maintaining aspect ratio?
+                    # Or fill slot? Let's fill slot (stretch/crop) or letterbox.
+                    # Simple approach: resize to slot_width x height (might distort)
+                    # Better: resize to slot_width x (slot_width * aspect) and center vertically
                     
-                    # Manual BGR to RGB conversion for numpy array
-                    if len(img.shape) == 3 and img.shape[2] == 3:
-                        img_rgb = img[..., ::-1]
-                    else:
-                        img_rgb = img
+                    h, w = img.shape[:2]
+                    scale = slot_width / w
+                    new_h = int(h * scale)
+                    resized = cv2.resize(img, (slot_width, new_h))
+                    
+                    # Center vertically
+                    y_offset = (height - new_h) // 2
+                    
+                    # Clip if too tall
+                    if y_offset < 0:
+                        start_y = -y_offset
+                        resized = resized[start_y:start_y+height, :]
+                        y_offset = 0
+                        new_h = height
                         
-                    pil_img = Image.fromarray(img_rgb)
+                    # Place
+                    x_start = slot_idx * slot_width
+                    canvas[y_offset:y_offset+new_h, x_start:x_start+slot_width] = resized
                     
-                    if pil_img.size[0] != width or pil_img.size[1] != height:
-                        pil_img = pil_img.resize((width, height), Image.Resampling.LANCZOS)
-                    
-                    buf = BytesIO()
-                    pil_img.save(buf, format="JPEG", quality=75)
-                    return buf.getvalue()
-                except ImportError:
-                    # Neither OpenCV nor PIL available
-                    return None
-                except Exception as e:
-                    print(f"[SOARMBackend] PIL render error: {e}")
-                    return None
+                    # Label
+                    if label:
+                        cv2.putText(canvas, label, (x_start + 10, 30), 
+                                   cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+
+                # Assign slots
+                # Slot 0: Side 1 (Left)
+                # Slot 1: Top (Center)
+                # Slot 2: Side 2 (Right)
+                
+                place_image(frames.get('side_1'), 0, "Side 1")
+                place_image(frames.get('top'), 1, "Top")
+                place_image(frames.get('side_2'), 2, "Side 2")
+                
+                # Encode
+                _, jpeg = cv2.imencode('.jpg', canvas)
+                return jpeg.tobytes()
+                
+            else:
+                # PIL Fallback (simplified, usually we have OpenCV)
+                return None
                 
         except Exception as e:
-            # print(f"[SOARMBackend] Render error: {e}") # Don't spam logs
+            # print(f"[SOARMBackend] Render error: {e}")
             return None
 
     def send_target_pose(self, position: np.ndarray, 

@@ -20,7 +20,7 @@ def main():
     parser.add_argument("--host", default="0.0.0.0", help="Host to bind to")
     parser.add_argument("--port", type=int, default=8000, help="Port to listen on")
     parser.add_argument("--backend", default="mock", 
-                       choices=["mock", "isaac", "mujoco"], help="Backend type")
+                       choices=["mock", "isaac", "mujoco", "soarm", "so101", "mock_vr"], help="Backend type")
     parser.add_argument("--mujoco-xml", help="Path to MuJoCo XML file")
     parser.add_argument("--mujoco-ee", help="Name of the end-effector site")
     parser.add_argument("--mujoco-camera", help="MuJoCo camera name (e.g. world_cam)")

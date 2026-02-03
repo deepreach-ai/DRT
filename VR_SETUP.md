@@ -91,6 +91,53 @@ vr_implementation_plan.md   # Full implementation guide
 
 ---
 
+## 🔌 USB Tethering (Best Connection)
+
+If Wi-Fi is unstable or blocked ("Limited Connection"), use **ADB Reverse** to send data over the USB cable. This is faster and more reliable than Wi-Fi.
+
+### 1. Enable Developer Mode (Required)
+You must do this **once** to unlock USB features:
+1.  Connect Quest 3S to your phone via **Meta Horizon App**.
+    - *Tip: If home Wi-Fi fails setup, use your phone's **Personal Hotspot** just to finish this step.*
+2.  In App: **Menu** -> **Devices** -> **Headset Settings** -> **Developer Mode** -> **ON**.
+3.  In Headset: Put it on, plug in USB to Mac, and click **"Allow USB Debugging"** (select "Always allow").
+
+### 2. Start USB Tethering
+Run these commands in your Mac terminal (or Meta Developer Hub):
+
+```bash
+# Verify connection (should show device ID)
+adb devices
+
+# Forward ports from Mac to Quest over USB
+adb reverse tcp:8080 tcp:8080
+adb reverse tcp:8000 tcp:8000
+```
+
+### 3. Connect in VR
+1.  Open **Quest Browser**.
+2.  **Address:** `http://localhost:8080/vr.html` (Use "localhost", NOT the IP address).
+3.  **Server URL:** `http://localhost:8000`.
+
+---
+
+## 🔧 Troubleshooting
+
+### "Limited Connection" / Setup Stuck
+If the Meta Horizon app gets stuck asking for Wi-Fi:
+1.  **Use a Hotspot:** The most common cause is a firewall or time-sync issue on your local router.
+    -   Turn on **Personal Hotspot** on your phone.
+    -   Connect the Quest to the Hotspot during setup.
+    -   Once Developer Mode is ON, you don't need the Hotspot anymore.
+2.  **Check Date/Time:** If the headset battery died, the clock might be wrong, breaking Wi-Fi.
+    -   Use Meta Developer Hub (MDH) to sync time if you can connect via USB.
+
+### WebXR Not Working
+- Ensure you are using `http://` (not https) and that the browser permissions are allowed.
+- If using USB tethering, make sure to run `adb reverse` again if you unplug the cable.
+
+---
+
 ## 🎮 Controls in VR
 
 Once in VR mode:

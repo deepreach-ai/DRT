@@ -23,6 +23,7 @@ class DeltaCommand(BaseModel):
     droll: float = 0.0  # radians
     dpitch: float = 0.0
     dyaw: float = 0.0
+    gripper_state: float = 0.0 # 0.0 (open) to 1.0 (closed), or -1.0 for ignore
     reference_frame: ReferenceFrame = ReferenceFrame.END_EFFECTOR
     max_velocity: float = 0.1  # m/s
     max_angular_velocity: float = 0.5  # rad/s

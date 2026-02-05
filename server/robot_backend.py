@@ -38,7 +38,8 @@ class RobotBackend(ABC):
     @abstractmethod
     def send_target_pose(self, position: np.ndarray, 
                          orientation: np.ndarray,
-                         velocity_limit: float = 0.1) -> bool:
+                         velocity_limit: float = 0.1,
+                         gripper_state: float = -1.0) -> bool:
         """
         Send target pose to robot
         
@@ -46,6 +47,7 @@ class RobotBackend(ABC):
             position: Target position [x, y, z] in meters
             orientation: Target orientation as quaternion [w, x, y, z]
             velocity_limit: Maximum velocity (m/s)
+            gripper_state: 0.0 (open) to 1.0 (closed), or -1.0 to ignore
             
         Returns:
             True if command was sent successfully

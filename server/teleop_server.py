@@ -105,14 +105,15 @@ class TeleoperationServer:
             }
         
         # Process command through controller
-        target_position, target_orientation, violations = self.controller.process_command(command)
+        target_position, target_orientation, gripper_state, violations = self.controller.process_command(command)
         
         # Send to robot backend
         if self.backend and self.backend.is_connected():
             success = self.backend.send_target_pose(
                 target_position, 
                 target_orientation,
-                velocity_limit=command.max_velocity
+                velocity_limit=command.max_velocity,
+                gripper_state=gripper_state
             )
             
             if not success:

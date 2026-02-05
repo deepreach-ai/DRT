@@ -94,9 +94,9 @@ class UnifiedRobotBackend(RobotBackend):
             self._backend.disconnect()
         self.status = BackendStatus.DISCONNECTED
 
-    def send_target_pose(self, position: np.ndarray, orientation: np.ndarray, velocity_limit: float = 0.1) -> bool:
+    def send_target_pose(self, position: np.ndarray, orientation: np.ndarray, velocity_limit: float = 0.1, gripper_state: float = -1.0) -> bool:
         if self._backend:
-            return self._backend.send_target_pose(position, orientation, velocity_limit)
+            return self._backend.send_target_pose(position, orientation, velocity_limit, gripper_state)
         return False
 
     def get_current_pose(self) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:

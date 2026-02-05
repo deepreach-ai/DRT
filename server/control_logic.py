@@ -36,7 +36,7 @@ class TeleoperationController:
         self.velocity_violations = 0
         
     def process_command(self, command: DeltaCommand,
-                        current_time: Optional[float] = None) -> Tuple[np.ndarray, np.ndarray, Dict[str, Any]]:
+                        current_time: Optional[float] = None) -> Tuple[np.ndarray, np.ndarray, float, Dict[str, Any]]:
         """
         Process a delta command and return target pose
         
@@ -47,6 +47,7 @@ class TeleoperationController:
         Returns:
             target_position: Target position in world frame [x, y, z]
             target_orientation: Target orientation as quaternion [w, x, y, z]
+            gripper_state: Gripper state (0.0-1.0)
             violations: Dictionary of any violations that occurred
         """
         if current_time is None:
@@ -126,7 +127,7 @@ class TeleoperationController:
         self.current_position = target_position.copy()
         self.current_orientation = target_orientation.copy()
         
-        return target_position, target_orientation, violations
+        return target_position, target_orientation, command.gripper_state, violations
     
     def _transform_to_world_frame(self, delta_pos_ee: np.ndarray) -> np.ndarray:
         """

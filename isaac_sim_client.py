@@ -116,6 +116,7 @@ class IsaacSimTCPClient:
         # State
         self.target_pos = np.array([0.5, 0.0, 0.5], dtype=np.float32)
         self.target_quat = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32) # w, x, y, z
+        self.gripper_state = 0.0 # 0.0 (open) to 1.0 (closed)
 
     def init_sim(self):
         print("Initializing simulation world...")
@@ -260,6 +261,8 @@ class IsaacSimTCPClient:
                                     self.target_pos = np.array(payload["target_position"], dtype=np.float32)
                                 if "target_orientation" in payload:
                                     self.target_quat = np.array(payload["target_orientation"], dtype=np.float32)
+                                if "gripper_state" in payload:
+                                    self.gripper_state = float(payload["gripper_state"])
                         except json.JSONDecodeError:
                             pass
                 except socket.timeout:
@@ -295,6 +298,14 @@ class IsaacSimTCPClient:
                     end_effector_frame_name=self.ee_frame
                 )
                 self.robot.apply_action(action)
+                
+                # Apply gripper state (Simple naive implementation)
+                # Assumes gripper joints are not controlled by IK
+                if self.gripper_state >= 0:
+                    # Find gripper joints (heuristic)
+                    # For now, just print if state changes to avoid spam
+                    # TODO: Implement actual gripper control based on robot specific joint names
+                    pass
             
             # Periodic logging
             if time.time() - last_log_time > 10.0:

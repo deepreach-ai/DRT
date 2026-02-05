@@ -18,6 +18,7 @@ args, unknown = parser.parse_known_args()
 
 # 2. Start SimulationApp with proper livestream config
 from omni.isaac.kit import SimulationApp
+import os
 
 config = {
     "headless": args.headless,

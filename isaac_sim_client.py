@@ -210,43 +210,50 @@ class IsaacSimTCPClient:
         # Also need to make sure physics scene is initialized?
         # World() init should handle physics scene.
         
-        add_reference_to_stage(usd_path=robot_url, prim_path="/World/Robot")
+        # In Isaac Sim 4.0, we might need to be more explicit with stage operations
+        from pxr import UsdGeom
+        stage = self.world.stage
         
-        # WAIT for stage to update?
-        # self.world.step(render=False) # Maybe?
+        # Check if prim exists
+        if not stage.GetPrimAtPath("/World/Robot"):
+             add_reference_to_stage(usd_path=robot_url, prim_path="/World/Robot")
         
         # Register the articulation
         # IMPORTANT: "robot" name must be unique.
-        # The crash 'NoneType' object has no attribute 'is_homogeneous' suggests physics parsing failed
-        # likely because the prim at /World/Robot is not fully loaded or valid when Articulation is initialized.
         
-        self.world.scene.add(
-            Articulation(prim_path="/World/Robot", name="robot")
-        )
+        # FIX for 'is_homogeneous' crash:
+        # The crash happens during articulation.initialize() -> _on_physics_ready()
+        # It seems the physics backend tensor view isn't ready.
+        # This often happens if we try to initialize too early in a script without a timeline play/step.
         
-        # Need to step once to ensure physics is parsed before reset?
-        # Or maybe reset() is failing because it's called too early?
-        # Let's add a step here.
+        # Try to delay the articulation wrapper creation until AFTER a reset/play?
+        # But we need it for the controller.
         
-        # self.world.reset() # This is where it crashes
+        # Let's try to add it to the scene, but maybe the scene.add() triggers the early init.
         
-        # Reset calls scene._finalize which calls articulation.initialize which checks physics
-        # If we reset immediately after adding, sometimes physics isn't ready.
-        # But World class usually handles this.
+        # Strategy:
+        # 1. Add reference (Done)
+        # 2. Reset world (initializes physics)
+        # 3. Add articulation wrapper
+        # 4. Initialize articulation
         
-        # TRY: Explicitly initialize physics context?
-        # or simply wait?
+        # Note: World.reset() clears the scene registry usually? No, it resets the timeline.
         
-        # In Isaac Sim 4.0, maybe we need to ensure the Articulation is valid.
-        # Let's try to reset AFTER getting the object, or splitting the reset.
+        # Let's try this order:
+        # 1. Add Reference
+        # 2. self.world.reset() (Soft reset)
+        # 3. Wrap Articulation
+        # 4. self.world.scene.add(articulation)
         
-        # Actually, self.world.reset() will initialize all objects in the scene.
-        # The error suggests the physics view is None.
-        
-        # WORKAROUND: Force a timeline step before reset?
-        # simulation_app.update()
-        
+        print("Resetting world to initialize physics...")
         self.world.reset()
+        
+        print("Wrapping articulation...")
+        robot_prim = Articulation(prim_path="/World/Robot", name="robot")
+        self.world.scene.add(robot_prim)
+        
+        # We might need another reset or step to register the new added object
+        # But since it's already in the stage (via reference), scene.add just registers the wrapper.
         
         self.robot = self.world.scene.get_object("robot")
         

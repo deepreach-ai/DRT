@@ -206,11 +206,45 @@ class IsaacSimTCPClient:
         # We need to add reference first, then wrap with Articulation
         from omni.isaac.core.utils.stage import add_reference_to_stage
         
+        # NOTE: Ensure we add to a fresh prim path if it doesn't exist
+        # Also need to make sure physics scene is initialized?
+        # World() init should handle physics scene.
+        
         add_reference_to_stage(usd_path=robot_url, prim_path="/World/Robot")
+        
+        # WAIT for stage to update?
+        # self.world.step(render=False) # Maybe?
+        
+        # Register the articulation
+        # IMPORTANT: "robot" name must be unique.
+        # The crash 'NoneType' object has no attribute 'is_homogeneous' suggests physics parsing failed
+        # likely because the prim at /World/Robot is not fully loaded or valid when Articulation is initialized.
         
         self.world.scene.add(
             Articulation(prim_path="/World/Robot", name="robot")
         )
+        
+        # Need to step once to ensure physics is parsed before reset?
+        # Or maybe reset() is failing because it's called too early?
+        # Let's add a step here.
+        
+        # self.world.reset() # This is where it crashes
+        
+        # Reset calls scene._finalize which calls articulation.initialize which checks physics
+        # If we reset immediately after adding, sometimes physics isn't ready.
+        # But World class usually handles this.
+        
+        # TRY: Explicitly initialize physics context?
+        # or simply wait?
+        
+        # In Isaac Sim 4.0, maybe we need to ensure the Articulation is valid.
+        # Let's try to reset AFTER getting the object, or splitting the reset.
+        
+        # Actually, self.world.reset() will initialize all objects in the scene.
+        # The error suggests the physics view is None.
+        
+        # WORKAROUND: Force a timeline step before reset?
+        # simulation_app.update()
         
         self.world.reset()
         

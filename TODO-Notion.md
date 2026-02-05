@@ -14,6 +14,9 @@
   - [x] Realman URDF located (`robots/realman_65/`)
   - [ ] SO-101 URDF
 - [ ] Isaac Sim spawn/test control for each robot
+  - [x] Client updated to support local USD loading
+  - [x] State reporting (Pose) added to Isaac client
+  - [x] WebRTC/MJPEG video streaming from Isaac to VR (via HTTP ingest)
 - [ ] Video streaming via Isaac Sim/WebRTC with latency dashboard
 - [x] Cloud deployment and USA ↔ Mexico latency measurement
 - [ ] Real robot SDK integration (SO-ARM100/REALMAN/灵域)
@@ -74,6 +77,8 @@
 - [x] Hardware integration plan
 - [x] Progress report for manager
 - [x] PPT outline for presentation
+- [x] **CONTRIBUTING.md with CLA** ✅
+- [x] **Apache 2.0 License** ✅
 
 ---
 

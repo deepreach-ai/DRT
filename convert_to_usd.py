@@ -8,7 +8,7 @@ try:
     from omni.isaac.kit import SimulationApp
     
     # Configure and start simulation app (required for conversion)
-    CONFIG = {"renderer": "RayTracedLighting", "headless": True}
+    CONFIG = {"renderer": "RayTracedLighting", "headless": False}
     simulation_app = SimulationApp(CONFIG)
     
     import omni.kit.commands
@@ -36,10 +36,20 @@ def convert_urdf(urdf_path, usd_path, headless=True):
     os.makedirs(os.path.dirname(abs_usd_path), exist_ok=True)
     
     # Enable URDF Importer extension
-    enable_extension("omni.importer.urdf")
+    # Try enabling the new extension name first (Isaac Sim 4.5+), then fallback to legacy
+    try:
+        enable_extension("isaacsim.asset.importer.urdf")
+        urdf_extension_name = "isaacsim.asset.importer.urdf"
+    except Exception:
+        enable_extension("omni.importer.urdf")
+        urdf_extension_name = "omni.importer.urdf"
     
+    # Force update app to ensure extension is loaded
+    for _ in range(10):
+        simulation_app.update()
+
     # Import config settings
-    import_config = _get_import_config()
+    import_config = _get_import_config(urdf_extension_name)
     
     # Run conversion
     status = omni.kit.commands.execute(
@@ -56,8 +66,11 @@ def convert_urdf(urdf_path, usd_path, headless=True):
         
     return status
 
-def _get_import_config():
-    from omni.importer.urdf import _urdf
+def _get_import_config(extension_name="omni.importer.urdf"):
+    if extension_name == "isaacsim.asset.importer.urdf":
+        from isaacsim.asset.importer.urdf import _urdf
+    else:
+        from omni.importer.urdf import _urdf
     
     # Create default config
     import_config = _urdf.ImportConfig()
@@ -73,7 +86,7 @@ def _get_import_config():
     import_config.default_position_drive_damping = 100.0
     import_config.default_drive_type = _urdf.UrdfJointTargetType.JOINT_DRIVE_POSITION
     import_config.distance_scale = 1.0
-    import_config.up_vector = 0, 0, 1
+    # import_config.up_vector = 0, 0, 1
     
     return import_config
 
@@ -91,9 +104,18 @@ def convert_mjcf(xml_path, usd_path):
         print(f"❌ Error: XML file not found at {abs_xml_path}")
         return False
 
-    enable_extension("omni.importer.mjcf")
+    # Try enabling the new extension name first (Isaac Sim 4.5+), then fallback to legacy
+    try:
+        enable_extension("isaacsim.asset.importer.mjcf")
+        mjcf_extension_name = "isaacsim.asset.importer.mjcf"
+    except Exception:
+        enable_extension("omni.importer.mjcf")
+        mjcf_extension_name = "omni.importer.mjcf"
     
-    from omni.importer.mjcf import _mjcf
+    if mjcf_extension_name == "isaacsim.asset.importer.mjcf":
+        from isaacsim.asset.importer.mjcf import _mjcf
+    else:
+        from omni.importer.mjcf import _mjcf
     
     import_config = _mjcf.ImportConfig()
     import_config.fix_base = True

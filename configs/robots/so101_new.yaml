@@ -1,0 +1,78 @@
+# SO-101 Platform Configuration
+# SO-101 平台配置
+
+robot_name: "SO_101"
+manufacturer: "SO Robotics"
+model: "SO-101"
+dof: 6
+description: "SO-101 6-DOF robotic arm platform"
+
+# ===== Isaac Sim Backend =====
+isaac_sim:
+  # USD path (converted from URDF/XML)
+  usd_path: "assets/usd/so101.usd"
+  
+  # Alternative: URDF/XML path
+  urdf_path: "assets/urdf/so101/robot.urdf"
+  
+  # Spawn location
+  default_position: [0.0, 0.0, 0.0]
+  default_orientation: [1.0, 0.0, 0.0, 0.0]
+  
+  # Isaac Sim prim path
+  prim_path: "/World/SO101"
+  
+  # End-effector frame (根据 XML 结构)
+  ee_frame: "gripperframe"
+  base_frame: "base_link"
+
+# ===== Real Robot Backend =====
+real_robot:
+  backend_type: "so101_sdk"
+  connection:
+    protocol: "tcp"
+    host: "192.168.1.102"  # Change to actual IP
+    port: 8082
+    timeout: 5.0
+  control_mode: "position"
+
+# ===== Workspace Limits =====
+workspace_limits:
+  # Cartesian limits (meters)
+  x: [-0.5, 0.5]
+  y: [-0.5, 0.5]
+  z: [0.0, 0.8]
+  
+  # Joint limits (radians)
+  joint_limits:
+    - [-3.14, 3.14]   # Joint 1
+    - [-2.0, 2.0]     # Joint 2
+    - [-2.5, 2.5]     # Joint 3
+    - [-3.14, 3.14]   # Joint 4
+    - [-2.0, 2.0]     # Joint 5
+    - [-3.14, 3.14]   # Joint 6
+
+# ===== Controller Settings =====
+controller:
+  max_velocity: 0.5  # m/s
+  max_angular_velocity: 1.0  # rad/s
+  control_rate_hz: 100
+  
+  # Joint velocity limits (rad/s)
+  max_joint_velocities: [1.5, 1.5, 1.5, 1.5, 1.5, 1.5]
+
+# ===== End-Effector =====
+end_effector:
+  type: "parallel_gripper"
+  gripper:
+    open_position: 0.03
+    close_position: 0.0
+    max_force: 60.0
+
+# ===== Safety Settings =====
+safety:
+  emergency_stop:
+    deceleration: 8.0
+  collision_detection:
+    enabled: true
+    sensitivity: 0.5

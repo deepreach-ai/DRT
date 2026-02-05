@@ -17,7 +17,10 @@ parser.add_argument("--enable-livestream", action="store_true", default=True, he
 args, unknown = parser.parse_known_args()
 
 # 2. Start SimulationApp with proper livestream config
-from omni.isaac.kit import SimulationApp
+# WARNING: Do NOT import omni.* or isaacsim.* before SimulationApp is created!
+# Only stdlib imports are allowed before this block.
+
+from isaacsim import SimulationApp
 import os
 
 config = {
@@ -30,7 +33,12 @@ config = {
 if args.headless and args.enable_livestream:
     config.update({
         "renderer": "RayTracedLighting",
-        "experience": f'{os.environ.get("EXP_PATH", "")}/omni.isaac.sim.python.kit',
+        # Fix: Isaac Sim 4.0+ uses a different kit file or doesn't need explicit experience
+        # If running from python.sh, it handles the kit loading.
+        # But if we must specify, try to detect or omit if problematic.
+        # For now, let's omit 'experience' as it's causing "File doesn't exist" errors
+        # and SimulationApp usually picks a default.
+        # "experience": f'{os.environ.get("EXP_PATH", "")}/omni.isaac.sim.python.kit',
     })
 
 simulation_app = SimulationApp(config)

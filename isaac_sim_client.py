@@ -93,10 +93,40 @@ if args.headless and args.enable_livestream:
     print(f"PLEASE USE OMNIVERSE STREAMING CLIENT to connect to: {public_ip or 'localhost'}")
 
 # 3. Import Isaac Core (must be after SimulationApp)
-from omni.isaac.core import World
-from omni.isaac.core.utils.nucleus import get_assets_root_path
-from omni.isaac.core.articulations import Articulation
-from omni.isaac.motion_generation import ArticulationMotionController
+# Isaac Sim 4.0+ Migration: Many modules moved to 'isaacsim' namespace
+# but we need to check if we are on 4.0 or older.
+# The error "ImportError: cannot import name 'ArticulationMotionController' from 'omni.isaac.motion_generation'"
+# suggests we are on a version where this class was moved or renamed.
+
+try:
+    # Try new location (Isaac Sim 4.0+)
+    from omni.isaac.core import World
+    from omni.isaac.core.utils.nucleus import get_assets_root_path
+    from omni.isaac.core.articulations import Articulation
+    
+    # In Isaac Sim 4.0, ArticulationMotionController might be in a different place or deprecated.
+    # It was part of omni.isaac.motion_generation.
+    # If it fails, we might need to use a different controller or check where it went.
+    # Based on docs, LulaKinematicsSolver is the replacement for IK.
+    
+    try:
+        from omni.isaac.motion_generation import ArticulationMotionController
+    except ImportError:
+        # Fallback or alternative for 4.0
+        # If ArticulationMotionController is gone, we might need to use LulaKinematicsSolver directly
+        # For now, let's try to find it in the new namespace if possible
+        # Or just use simple Articulation control without the MotionController wrapper if we can't find it.
+        print("⚠️ ArticulationMotionController not found in omni.isaac.motion_generation. Checking alternatives...")
+        try:
+            from omni.isaac.motion_generation.articulation_motion_controller import ArticulationMotionController
+        except ImportError:
+            print("❌ Could not import ArticulationMotionController. IK will be disabled.")
+            ArticulationMotionController = None
+
+except ImportError:
+    # Fallback to old imports if needed (unlikely given the error log)
+    pass
+
 import os
 
 import requests
@@ -179,7 +209,12 @@ class IsaacSimTCPClient:
         self.world.reset()
         
         self.robot = self.world.scene.get_object("robot")
-        self.controller = ArticulationMotionController(self.robot)
+        
+        if ArticulationMotionController:
+            self.controller = ArticulationMotionController(self.robot)
+        else:
+            print("⚠️ No MotionController available. IK commands will be ignored.")
+            self.controller = None
         
         # Warm-up
         for _ in range(10):

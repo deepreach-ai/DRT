@@ -19,6 +19,9 @@ EE_FRAME="link_6"
 if [ "$ROBOT_NAME" == "lingyu_robot" ]; then
     USD_PATH="assets/usd/lingyu_robot.usd"
     EE_FRAME="end_effector"
+elif [ "$ROBOT_NAME" == "realman_rm65" ]; then
+    # Correct filename for Realman based on Isaac Sim assets
+    USD_PATH="assets/usd/RM65-6F.usd" 
 fi
 
 echo -e "${GREEN}1. Starting Teleop Server (Port 8000)...${NC}"
@@ -34,6 +37,12 @@ echo "   USD: $USD_PATH"
 
 # Function to find Isaac python
 find_isaac_python() {
+    # Check ISAAC_SIM_PATH env var first
+    if [ ! -z "$ISAAC_SIM_PATH" ] && [ -f "$ISAAC_SIM_PATH/python.sh" ]; then
+        echo "$ISAAC_SIM_PATH/python.sh"
+        return
+    fi
+
     if [ -f "isaac-sim/python.sh" ]; then
         echo "isaac-sim/python.sh"
     elif [ -f "$HOME/.local/share/ov/pkg/isaac_sim-4.0.0/python.sh" ]; then
@@ -41,8 +50,10 @@ find_isaac_python() {
     elif [ -f "$HOME/.local/share/ov/pkg/isaac_sim-2023.1.1/python.sh" ]; then
         echo "$HOME/.local/share/ov/pkg/isaac_sim-2023.1.1/python.sh"
     else
-        # Try generic find
-        find $HOME/.local/share/ov/pkg -name "python.sh" | head -n 1
+        # Try generic find if directory exists
+        if [ -d "$HOME/.local/share/ov/pkg" ]; then
+            find $HOME/.local/share/ov/pkg -name "python.sh" | head -n 1
+        fi
     fi
 }
 

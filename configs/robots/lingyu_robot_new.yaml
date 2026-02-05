@@ -1,79 +1,22 @@
-# 灵域机器人配置
-# Lingyu Robot Configuration  
-# 注：URDF中是双臂 (LJ1-LJ7 和 RJ1-RJ7)，这里先配置单臂（左臂）
-
 robot_name: "LINGYU_ROBOT"
-manufacturer: "灵域科技 (Lingyu Robotics)"
-model: "Lingyu Dual-Arm"
-dof: 7  # Single arm (left arm: LJ1-LJ7)
-description: "灵域双臂机器人 - 左臂配置"
+dof: 7
+manufacturer: "Lingyu"
 
-# ===== Isaac Sim Backend =====
 isaac_sim:
-  # USD path (converted from URDF)
-  usd_path: "assets/usd/lingyu_robot.usd"
-  
-  # Alternative: URDF path
-  urdf_path: "assets/urdf/lingyu_robot/robot.urdf"
-  
-  # Spawn location
-  default_position: [0.0, 0.0, 0.0]
-  default_orientation: [1.0, 0.0, 0.0, 0.0]
-  
-  # Isaac Sim prim path
-  prim_path: "/World/Lingyu"
-  
-  # End-effector frame (左臂末端)
-  ee_frame: "Link_L8"
-  base_frame: "base_link"
+  usd_path: "assets/usd/lingyu_robot.usd"  # To be converted from URDF
+  urdf_path: "robots/lingyu_robot/urdf/urdf20251126.urdf"
+  ee_frame: "end_effector"
+  prim_path: "/World/LingyuRobot"
 
-# ===== Real Robot Backend =====
 real_robot:
   backend_type: "lingyu_sdk"
   connection:
-    protocol: "tcp"
-    host: "192.168.1.101"  # 需要修改为实际IP
-    port: 8081
-    timeout: 5.0
+    ip: "192.168.1.101"
 
-# ===== Workspace Limits =====
 workspace_limits:
-  # Cartesian limits (meters)
   x: [-0.8, 0.8]
   y: [-0.8, 0.8]
   z: [0.0, 1.2]
-  
-  # Joint limits (radians) - 需要根据实际机器人填写
-  joint_limits:
-    - [-3.14, 3.14]   # Joint 1
-    - [-2.0, 2.0]     # Joint 2
-    - [-2.5, 2.5]     # Joint 3
-    - [-3.14, 3.14]   # Joint 4
-    - [-2.0, 2.0]     # Joint 5
-    - [-2.5, 2.5]     # Joint 6
-    - [-3.14, 3.14]   # Joint 7
 
-# ===== Controller Settings =====
 controller:
-  max_velocity: 0.8  # m/s
-  max_angular_velocity: 1.5  # rad/s
-  control_rate_hz: 100
-  
-  # Joint velocity limits (rad/s)
-  max_joint_velocities: [2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0]
-
-# ===== End-Effector =====
-end_effector:
-  type: "parallel_gripper"
-  gripper:
-    open_position: 0.05
-    close_position: 0.0
-    max_force: 80.0
-
-# ===== Safety Settings =====
-safety:
-  emergency_stop:
-    deceleration: 8.0
-  collision_detection:
-    enabled: true
-    sensitivity: 0.5
+  max_velocity: 0.4

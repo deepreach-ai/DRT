@@ -1,0 +1,24 @@
+robot_name: "REALMAN_RM65"
+dof: 6
+manufacturer: "REALMAN Robotics"
+
+isaac_sim:
+  usd_path: "assets/usd/realman_rm65.usd"
+  urdf_path: "robots/realman_65/RM65-6F.urdf"
+  ee_frame: "link_6"
+  prim_path: "/World/REALMAN_RM65"
+
+real_robot:
+  backend_type: "realman_sdk"
+  connection:
+    ip: "192.168.1.100"
+    port: 8080
+
+workspace_limits:
+  x: [-0.65, 0.65]
+  y: [-0.65, 0.65]
+  z: [0.0, 1.0]
+
+controller:
+  max_velocity: 0.5
+  control_rate_hz: 100

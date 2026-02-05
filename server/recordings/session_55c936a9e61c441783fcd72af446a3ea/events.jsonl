@@ -1,0 +1,3 @@
+{"type": "session_start", "ts": 1769140935.0729332, "username": "operator"}
+{"type": "state", "ts": 1769140935.07324, "payload": {"type": "state", "ts": 1769140935.07324, "status": {"is_active": false, "safety_gate_active": false, "last_command_time": 0.0, "robot_connected": true, "backend_type": "mujoco", "workspace_violation": false, "velocity_violation": false}, "robot": {"position": [0.020394979000000618, -0.23503109999999988, 0.17438170000000097], "orientation": [1.458906693070227e-16, 2.7755575615628914e-16, 1.5543122344752192e-15, 1.0], "status": "connected", "timestamp": 1769140935.07324}}}
+{"type": "session_end", "ts": 1769140935.098197}

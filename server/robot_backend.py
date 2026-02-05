@@ -107,6 +107,11 @@ class BackendFactory:
             port = kwargs.get('port', '/dev/tty.usbmodem5B3E1187881')
             name = kwargs.get('name', 'so_arm')
             return SOARMBackend(port=port, name=name)
+        
+        elif backend_type.lower() == 'mock_vr' or backend_type.lower() == 'mockvr':
+            from backends.mock_vr_backend import MockVRBackend
+            name = kwargs.get('name', 'mock_vr')
+            return MockVRBackend(name=name)
             
         else:
             raise ValueError(f"Unknown backend type: {backend_type}")

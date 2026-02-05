@@ -19,14 +19,17 @@ def main():
     parser = argparse.ArgumentParser(description="Teleoperation Server")
     parser.add_argument("--host", default="0.0.0.0", help="Host to bind to")
     parser.add_argument("--port", type=int, default=8000, help="Port to listen on")
-    parser.add_argument("--backend", default="mock", 
+    parser.add_argument("--backend", default="mock",
                        choices=["mock", "isaac", "mujoco", "soarm", "so101", "mock_vr"], help="Backend type")
     parser.add_argument("--mujoco-xml", help="Path to MuJoCo XML file")
     parser.add_argument("--mujoco-ee", help="Name of the end-effector site")
     parser.add_argument("--mujoco-camera", help="MuJoCo camera name (e.g. world_cam)")
+    parser.add_argument("--soarm-port", help="USB port for SO-ARM robot (e.g. /dev/ttyUSB0)")
+    parser.add_argument("--isaac-host", help="Isaac Sim host address")
+    parser.add_argument("--isaac-port", type=int, help="Isaac Sim port")
     parser.add_argument("--no-server", action="store_true",
                        help="Initialize only, don't run server")
-    
+
     args = parser.parse_args()
 
     # Set environment variables for MuJoCo backend
@@ -36,10 +39,29 @@ def main():
         os.environ["TELEOP_MUJOCO_EE_SITE"] = args.mujoco_ee
     if args.mujoco_camera:
         os.environ["TELEOP_MUJOCO_CAMERA"] = args.mujoco_camera
-    
+
+    # Set environment variables for SO-ARM backend
+    if args.soarm_port:
+        os.environ["TELEOP_SOARM_PORT"] = args.soarm_port
+
+    # Set environment variables for Isaac backend
+    if args.isaac_host:
+        os.environ["TELEOP_ISAAC_HOST"] = args.isaac_host
+    if args.isaac_port:
+        os.environ["TELEOP_ISAAC_PORT"] = str(args.isaac_port)
+
     if args.no_server:
         # Just initialize and test
-        server = TeleoperationServer(backend_type=args.backend)
+        backend_config = {}
+        if args.backend in ['soarm', 'so101'] and args.soarm_port:
+            backend_config['port'] = args.soarm_port
+        elif args.backend == 'isaac':
+            if args.isaac_host:
+                backend_config['host'] = args.isaac_host
+            if args.isaac_port:
+                backend_config['port'] = args.isaac_port
+
+        server = TeleoperationServer(backend_type=args.backend, backend_config=backend_config)
         server.initialize()
         print(f"Server initialized with {args.backend} backend")
         print("Press Ctrl+C to exit...")

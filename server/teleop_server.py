@@ -241,6 +241,9 @@ def get_server() -> TeleoperationServer:
             isaac_host = os.getenv("TELEOP_ISAAC_HOST", "0.0.0.0")
             isaac_port = int(os.getenv("TELEOP_ISAAC_PORT", "9000"))
             backend_config = {"host": isaac_host, "port": isaac_port}
+        elif backend.lower() in ["soarm", "so101"]:
+            soarm_port = os.getenv("TELEOP_SOARM_PORT", "/dev/ttyUSB0")
+            backend_config = {"port": soarm_port}
         _server_instance = TeleoperationServer(backend_type=backend, backend_config=backend_config)
         _server_instance.initialize()
     return _server_instance

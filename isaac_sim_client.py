@@ -202,8 +202,14 @@ class IsaacSimTCPClient:
             
         print(f"Final robot URL: {robot_url}")
         
+        # In Isaac Sim 4.0, Articulation doesn't accept usd_path in __init__
+        # We need to add reference first, then wrap with Articulation
+        from omni.isaac.core.utils.stage import add_reference_to_stage
+        
+        add_reference_to_stage(usd_path=robot_url, prim_path="/World/Robot")
+        
         self.world.scene.add(
-            Articulation(prim_path="/World/Robot", usd_path=robot_url, name="robot")
+            Articulation(prim_path="/World/Robot", name="robot")
         )
         
         self.world.reset()

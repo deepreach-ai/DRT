@@ -385,7 +385,8 @@ class SOARMBackend(RobotBackend):
 
     def send_target_pose(self, position: np.ndarray, 
                          orientation: np.ndarray,
-                         velocity_limit: float = 0.1) -> bool:
+                         velocity_limit: float = 0.1,
+                         gripper_state: float = -1.0) -> bool:
         """
         Send target pose to SO-ARM
         
@@ -469,7 +470,7 @@ class SOARMBackend(RobotBackend):
                 self.current_orientation = orientation
                 
                 # If delta is too small, ignore (noise or no movement)
-                if np.linalg.norm(delta_pos) < 0.0001:
+                if np.linalg.norm(delta_pos) < 0.0001 and gripper_state == -1.0:
                     return True
                 
                 # Calculate joint increments
@@ -497,6 +498,20 @@ class SOARMBackend(RobotBackend):
                 if len(new_joints) >= 1: new_joints[0] += d_j1
                 if len(new_joints) >= 2: new_joints[1] += d_j2 # Try inverting if moves wrong way
                 if len(new_joints) >= 3: new_joints[2] += d_j3
+                
+                # Gripper Control (Assuming Joint 6 is gripper)
+                # Map 0.0 (open) - 1.0 (closed) to servo range
+                # STS3215 range is usually 0-4096. Let's assume 0-1000 for gripper for now.
+                if gripper_state >= 0 and len(new_joints) >= 6:
+                    # 0.0 -> Open (Low value?)
+                    # 1.0 -> Closed (High value?)
+                    # Need to check physical limits. Let's try range 2048 +/- 500
+                    center = 2048
+                    width = 500
+                    # Open (0.0) -> center - width
+                    # Closed (1.0) -> center + width
+                    target_val = (center - width) + (gripper_state * 2 * width)
+                    new_joints[5] = target_val
                 
                 print(f"[SOARMBackend] Moving: Delta={delta_pos} -> Joints+={[d_j1, d_j2, d_j3]}")
 

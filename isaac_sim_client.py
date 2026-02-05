@@ -90,6 +90,15 @@ from omni.isaac.core.articulations import Articulation
 from omni.isaac.motion_generation import ArticulationMotionController
 import os
 
+import requests
+import io
+try:
+    from PIL import Image
+except ImportError:
+    import pip
+    pip.main(['install', 'pillow'])
+    from PIL import Image
+
 class IsaacSimTCPClient:
     def __init__(self, host, port, robot_usd, ee_frame):
         self.host = host
@@ -131,6 +140,12 @@ class IsaacSimTCPClient:
             orientation=np.array([0.85, 0.15, 0.35, 0.35])  # Looking at origin
         )
         
+        # Setup Render Product for capture
+        import omni.replicator.core as rep
+        self.render_product = rep.create.render_product(camera_path, (960, 540))
+        self.rgb_annotator = rep.AnnotatorRegistry.get_annotator("rgb")
+        self.rgb_annotator.attach([self.render_product])
+        
         # Load robot
         assets_root = get_assets_root_path()
         
@@ -165,8 +180,27 @@ class IsaacSimTCPClient:
     def network_loop(self):
         """Background thread to handle TCP communication with teleop server"""
         last_state_time = 0
+        last_frame_time = 0
         
         while self.running:
+            # Capture video frame (10Hz)
+            if self.running and time.time() - last_frame_time > 0.1:
+                try:
+                    data = self.rgb_annotator.get_data()
+                    if data is not None:
+                        # Data is (H, W, 4) or (H, W, 3) uint8
+                        img = Image.fromarray(data[:, :, :3]) # Drop alpha if present
+                        buf = io.BytesIO()
+                        img.save(buf, format='JPEG', quality=60)
+                        jpg_bytes = buf.getvalue()
+                        
+                        # Post to server
+                        url = f"http://{self.host}:8000/api/v1/video/ingest"
+                        requests.post(url, data=jpg_bytes, timeout=0.05)
+                        last_frame_time = time.time()
+                except Exception:
+                    pass
+            
             if self.sock is None:
                 try:
                     print(f"🔌 Connecting to {self.host}:{self.port}...")

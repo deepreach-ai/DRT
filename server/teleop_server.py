@@ -441,10 +441,32 @@ async def logout(token: str):
     return {"status": "ok"}
 
 
+@app.post("/api/v1/video/ingest")
+async def ingest_video(request: Request):
+    """
+    Ingest a video frame (JPEG) from an external source (e.g., Isaac Sim)
+    """
+    server = get_server()
+    if not server.backend:
+        raise HTTPException(status_code=503, detail="No backend initialized")
+    
+    # Read raw body
+    body = await request.body()
+    
+    if hasattr(server.backend, "update_frame"):
+        server.backend.update_frame(body)
+        return {"status": "ok", "size": len(body)}
+    else:
+        raise HTTPException(status_code=400, detail="Backend does not support video ingest")
+
+
 @app.get("/api/v1/video/mjpeg")
 async def video_mjpeg(token: str):
-    if _auth.auth_enabled() and not _auth.verify_token(token):
-        raise HTTPException(status_code=401, detail="Unauthorized")
+    # Allow simple token check or no auth for local demo if needed
+    if _auth.auth_enabled():
+        if not _auth.verify_token(token):
+             raise HTTPException(status_code=401, detail="Unauthorized")
+    
     server = get_server()
 
     def get_state():

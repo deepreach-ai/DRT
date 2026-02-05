@@ -32,6 +32,10 @@ class IsaacSimBackend(RobotBackend):
         self.last_error: Optional[str] = None
         self.lock = threading.Lock()
         
+        # Video state
+        self.latest_frame = None
+        self.frame_lock = threading.Lock()
+        
         # Network
         self.server_socket = None
         self.client_socket = None
@@ -197,5 +201,18 @@ class IsaacSimBackend(RobotBackend):
             "last_error": self.last_error,
             "last_update": self.last_update_time,
             "endpoint": f"{self.host}:{self.port}",
-            "client": str(self.client_address) if self.client_address else None
+            "client": str(self.client_address) if self.client_address else None,
+            "has_video": self.latest_frame is not None
         }
+
+    def update_frame(self, jpg_bytes: bytes):
+        """Update the latest video frame"""
+        with self.frame_lock:
+            self.latest_frame = jpg_bytes
+
+    def render(self, width: int = 960, height: int = 540) -> Optional[bytes]:
+        """Render the latest frame"""
+        with self.frame_lock:
+            if self.latest_frame:
+                return self.latest_frame
+        return None

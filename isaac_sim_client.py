@@ -133,13 +133,19 @@ class IsaacSimTCPClient:
         
         # Load robot
         assets_root = get_assets_root_path()
-        if not assets_root:
-            print("⚠️  Warning: Could not find Nucleus assets root")
-            robot_url = self.robot_usd
-        else:
+        
+        # Check if local path exists
+        if os.path.exists(self.robot_usd):
+            robot_url = os.path.abspath(self.robot_usd)
+            print(f"Loading local robot USD: {robot_url}")
+        elif assets_root:
             robot_url = f"{assets_root}/Isaac/Robots/{self.robot_usd}"
+            print(f"Loading Nucleus robot USD: {robot_url}")
+        else:
+            print("⚠️  Warning: Could not find Nucleus assets root and file not found locally")
+            robot_url = self.robot_usd
             
-        print(f"Loading robot from: {robot_url}")
+        print(f"Final robot URL: {robot_url}")
         
         self.world.scene.add(
             Articulation(prim_path="/World/Robot", usd_path=robot_url, name="robot")
@@ -158,6 +164,8 @@ class IsaacSimTCPClient:
 
     def network_loop(self):
         """Background thread to handle TCP communication with teleop server"""
+        last_state_time = 0
+        
         while self.running:
             if self.sock is None:
                 try:
@@ -171,28 +179,58 @@ class IsaacSimTCPClient:
                     time.sleep(3)
                     continue
 
+            # Send state update (Pose)
+            if self.robot and time.time() - last_state_time > 0.05: # 20Hz
+                try:
+                    # Get pose
+                    pos, rot = self.robot.get_world_pose()
+                    # Convert rot (w,x,y,z) to list
+                    
+                    state_msg = {
+                        "type": "state",
+                        "payload": {
+                            "position": pos.tolist(),
+                            "orientation": rot.tolist(), # w,x,y,z
+                            "timestamp": time.time()
+                        }
+                    }
+                    
+                    data = json.dumps(state_msg) + "\n"
+                    self.sock.sendall(data.encode("utf-8"))
+                    last_state_time = time.time()
+                except Exception as e:
+                    print(f"⚠️ Error sending state: {e}")
+                    # Don't break connection immediately on send error, might be transient
+                    
             try:
-                data = self.sock.recv(4096)
-                if not data:
-                    print("⚠️  Server disconnected")
-                    self.sock.close()
-                    self.sock = None
-                    continue
-                
-                buffer = data.decode("utf-8")
-                for line in buffer.split("\n"):
-                    if not line.strip():
+                # Non-blocking receive would be better, but we used threading
+                # We can set a timeout on the socket
+                self.sock.settimeout(0.01)
+                try:
+                    data = self.sock.recv(4096)
+                    if not data:
+                        print("⚠️  Server disconnected")
+                        self.sock.close()
+                        self.sock = None
                         continue
-                    try:
-                        msg = json.loads(line)
-                        if msg.get("type") == "command":
-                            payload = msg.get("payload", {})
-                            if "target_position" in payload:
-                                self.target_pos = np.array(payload["target_position"], dtype=np.float32)
-                            if "target_orientation" in payload:
-                                self.target_quat = np.array(payload["target_orientation"], dtype=np.float32)
-                    except json.JSONDecodeError:
-                        pass
+                    
+                    buffer = data.decode("utf-8")
+                    for line in buffer.split("\n"):
+                        if not line.strip():
+                            continue
+                        try:
+                            msg = json.loads(line)
+                            if msg.get("type") == "command":
+                                payload = msg.get("payload", {})
+                                if "target_position" in payload:
+                                    self.target_pos = np.array(payload["target_position"], dtype=np.float32)
+                                if "target_orientation" in payload:
+                                    self.target_quat = np.array(payload["target_orientation"], dtype=np.float32)
+                        except json.JSONDecodeError:
+                            pass
+                except socket.timeout:
+                    pass # No data
+                    
             except Exception as e:
                 print(f"❌ Network error: {e}")
                 if self.sock:

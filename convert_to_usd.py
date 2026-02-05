@@ -52,12 +52,71 @@ def convert_urdf(urdf_path, usd_path, headless=True):
     import_config = _get_import_config(urdf_extension_name)
     
     # Run conversion
+    # Note: URDFParseAndImportFile expects dest_path, not output_path
+    # The command might vary by version. Let's try the modern signature first.
+    # Isaac Sim 2022+ usually uses 'dest_path'
+    
+    # Fix for "package://" paths if needed
+    # We can try to set the ROS_PACKAGE_PATH env var to the parent of the robot directory
+    # E.g. if urdf is in /abs/path/to/robots/realman_65/RM65-6F.urdf
+    # and it references package://RM65-6F/meshes/...
+    # then ROS_PACKAGE_PATH should include /abs/path/to/robots/realman_65 (where the package dir is)
+    
+    # Check if the URDF uses package://
+    # We assume the directory name containing the URDF is the package name or the parent contains it
+    # In this case: robots/realman_65/RM65-6F.urdf
+    # The mesh path is package://RM65-6F/meshes/base_link.STL
+    # So we need a directory named "RM65-6F" that contains "meshes"
+    # But our directory is "realman_65". 
+    # The user might have renamed it or extracted it.
+    # We need to ensure the structure matches what the URDF expects.
+    
+    # Hack: Temporarily symlink if needed or just set ROS_PACKAGE_PATH to the parent of the folder that matches the package name
+    # But here the folder "realman_65" contains the URDF. The URDF expects "RM65-6F".
+    # So we should probably rename "realman_65" to "RM65-6F" OR symlink it.
+    
+    # Let's try to infer the package root.
+    urdf_dir = os.path.dirname(abs_urdf_path) # .../robots/realman_65
+    
+    # If the mesh paths are package://RM65-6F/...
+    # We need ROS_PACKAGE_PATH to point to the directory CONTAINING "RM65-6F"
+    # Current structure: .../robots/realman_65/RM65-6F.urdf
+    #                    .../robots/realman_65/meshes/...
+    # So "realman_65" acts as the package root, but its name is "realman_65", not "RM65-6F".
+    # The URDF importer might fail to resolve "package://RM65-6F" if it looks for a folder named "RM65-6F".
+    
+    # Workaround: Create a symlink "RM65-6F" -> "." inside "realman_65" ? No, that would be recursive loop if naive.
+    # Better: Create a symlink "RM65-6F" -> "realman_65" in the "robots" directory.
+    
+    robots_dir = os.path.dirname(urdf_dir) # .../robots
+    symlink_path = os.path.join(robots_dir, "RM65-6F")
+    
+    created_symlink = False
+    if not os.path.exists(symlink_path) and os.path.basename(urdf_dir) != "RM65-6F":
+        try:
+            os.symlink(urdf_dir, symlink_path)
+            created_symlink = True
+            print(f"🔗 Created symlink for ROS package: {symlink_path} -> {urdf_dir}")
+        except Exception as e:
+            print(f"⚠️ Failed to create symlink: {e}")
+
+    # Set ROS_PACKAGE_PATH
+    os.environ["ROS_PACKAGE_PATH"] = f"{robots_dir}:{os.environ.get('ROS_PACKAGE_PATH', '')}"
+    print(f"ℹ️  Set ROS_PACKAGE_PATH to include: {robots_dir}")
+
     status = omni.kit.commands.execute(
         "URDFParseAndImportFile",
         urdf_path=abs_urdf_path,
         import_config=import_config,
         dest_path=abs_usd_path,
     )
+    
+    if created_symlink:
+        try:
+            os.unlink(symlink_path)
+            print("🧹 Removed temporary symlink")
+        except:
+            pass
     
     if status:
         print("✅ Conversion Successful!")

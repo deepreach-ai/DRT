@@ -25,7 +25,7 @@ This guide covers integrating Isaac Sim with your teleoperation system on AWS EC
 
 **Start everything:**
 ```bash
-cd /home/ubuntu/teleop_system/deployment
+cd /home/ubuntu/drt/deployment
 chmod +x start_full_system.sh
 ./start_full_system.sh
 ```
@@ -53,7 +53,7 @@ docker-compose -f docker-compose.full.yml down
 
 **Start mock server:**
 ```bash
-cd /home/ubuntu/teleop_system/deployment
+cd /home/ubuntu/drt/deployment
 export TELEOP_BACKEND=mock
 docker-compose up -d
 ```
@@ -81,7 +81,7 @@ chmod +x omniverse-launcher-linux.AppImage
 
 **2. Start teleop server:**
 ```bash
-cd /home/ubuntu/teleop_system
+cd /home/ubuntu/drt
 python run_server.py --backend isaac --host 0.0.0.0 --port 8000
 ```
 
@@ -159,7 +159,7 @@ curl -X POST http://localhost:8000/api/v1/command \
 
 **Install client:**
 ```bash
-cd /path/to/teleop_system
+cd /path/to/drt
 pip install -r client/requirements.txt
 ```
 
@@ -296,7 +296,7 @@ nvidia-smi -l 1
 
 **Update code:**
 ```bash
-cd /home/ubuntu/teleop_system
+cd /home/ubuntu/drt
 git pull
 docker-compose -f deployment/docker-compose.full.yml down
 docker-compose -f deployment/docker-compose.full.yml up -d --build

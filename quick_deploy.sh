@@ -16,7 +16,7 @@ fi
 
 SERVER_IP=$1
 SERVER_USER=${SERVER_USER:-ubuntu}  # Default to ubuntu, can override with env var
-PROJECT_NAME="teleop_system"
+PROJECT_NAME="drt"
 
 echo ""
 echo "📋 Configuration:"
@@ -27,8 +27,8 @@ echo ""
 
 # Step 1: Package the code
 echo "📦 Step 1: Packaging code..."
-cd ~/teleop_system
-tar -czf /tmp/teleop_system.tar.gz \
+cd ~/drt
+tar -czf /tmp/drt.tar.gz \
     --exclude='.git' \
     --exclude='.venv' \
     --exclude='__pycache__' \
@@ -41,7 +41,7 @@ echo "✓ Code packaged"
 # Step 2: Upload to server
 echo ""
 echo "📤 Step 2: Uploading to server..."
-scp /tmp/teleop_system.tar.gz $SERVER_USER@$SERVER_IP:/tmp/
+scp /tmp/drt.tar.gz $SERVER_USER@$SERVER_IP:/tmp/
 echo "✓ Uploaded"
 
 # Step 3: Deploy on server
@@ -55,11 +55,11 @@ ssh $SERVER_USER@$SERVER_IP << 'ENDSSH'
     sudo apt-get install -y -qq python3 python3-pip python3-venv git
     
     echo "  • Creating project directory..."
-    mkdir -p ~/teleop_system
-    cd ~/teleop_system
+    mkdir -p ~/drt
+    cd ~/drt
     
     echo "  • Extracting code..."
-    tar -xzf /tmp/teleop_system.tar.gz
+    tar -xzf /tmp/drt.tar.gz
     
     echo "  • Setting up virtual environment..."
     python3 -m venv venv
@@ -81,9 +81,9 @@ After=network.target
 [Service]
 Type=simple
 User=$USER
-WorkingDirectory=$HOME/teleop_system
-Environment="PATH=$HOME/teleop_system/venv/bin"
-ExecStart=$HOME/teleop_system/venv/bin/python run_server.py --backend mock --host 0.0.0.0 --port 8000
+WorkingDirectory=$HOME/drt
+Environment="PATH=$HOME/drt/venv/bin"
+ExecStart=$HOME/drt/venv/bin/python run_server.py --backend mock --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=10
 
@@ -100,9 +100,9 @@ After=network.target
 [Service]
 Type=simple
 User=$USER
-WorkingDirectory=$HOME/teleop_system
-Environment="PATH=$HOME/teleop_system/venv/bin"
-ExecStart=$HOME/teleop_system/venv/bin/python client/web_server.py
+WorkingDirectory=$HOME/drt
+Environment="PATH=$HOME/drt/venv/bin"
+ExecStart=$HOME/drt/venv/bin/python client/web_server.py
 Restart=always
 RestartSec=10
 

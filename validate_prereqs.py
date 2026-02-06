@@ -35,8 +35,8 @@ def check_warn(message):
     print(f"{Colors.YELLOW}⚠️  WARN{Colors.RESET} - {message}")
     return True
 
-# Change to teleop_system directory
-TELEOP_DIR = Path("/Users/ziguo/teleop_system")
+# Change to drt directory
+TELEOP_DIR = Path("/Users/ziguo/drt")
 os.chdir(TELEOP_DIR)
 
 print_header("TELEOP SYSTEM PRE-VALIDATION CHECKS")

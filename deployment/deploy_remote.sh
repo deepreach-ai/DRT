@@ -6,7 +6,7 @@ set -e
 EC2_HOST="${EC2_HOST:-}"
 SSH_KEY="${SSH_KEY:-}"
 REMOTE_USER="ubuntu"
-REMOTE_DIR="~/teleop_system"
+REMOTE_DIR="~/drt"
 
 # Help message
 if [ -z "$EC2_HOST" ] || [ -z "$SSH_KEY" ]; then
@@ -19,11 +19,11 @@ echo "🚀 Starting deployment to $EC2_HOST..."
 
 # 1. Prepare archive excluding venv, git, etc.
 echo "📦 Packaging project..."
-tar --exclude='venv' --exclude='.git' --exclude='__pycache__' --exclude='.DS_Store' -czf teleop_deploy.tar.gz -C .. .
+tar --exclude='venv' --exclude='.git' --exclude='__pycache__' --exclude='.DS_Store' -czf drt_deploy.tar.gz -C .. .
 
 # 2. Copy archive and setup script
 echo "pw Uploading files..."
-scp -i "$SSH_KEY" -o StrictHostKeyChecking=no teleop_deploy.tar.gz "$REMOTE_USER@$EC2_HOST:~/"
+scp -i "$SSH_KEY" -o StrictHostKeyChecking=no drt_deploy.tar.gz "$REMOTE_USER@$EC2_HOST:~/"
 scp -i "$SSH_KEY" -o StrictHostKeyChecking=no ec2_setup.sh "$REMOTE_USER@$EC2_HOST:~/"
 
 # 3. Execute remote setup and deployment
@@ -31,7 +31,7 @@ echo "🔧 Executing remote setup..."
 ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$REMOTE_USER@$EC2_HOST" << EOF
     # Unpack
     mkdir -p $REMOTE_DIR
-    tar -xzf ~/teleop_deploy.tar.gz -C $REMOTE_DIR
+    tar -xzf ~/drt_deploy.tar.gz -C $REMOTE_DIR
     
     # Make setup script executable
     chmod +x ~/ec2_setup.sh
@@ -55,5 +55,5 @@ ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$REMOTE_USER@$EC2_HOST" << EOF
 EOF
 
 # Cleanup
-rm teleop_deploy.tar.gz
+rm drt_deploy.tar.gz
 echo "🎉 Done!"

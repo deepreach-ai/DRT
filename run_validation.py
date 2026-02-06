@@ -52,7 +52,7 @@ def check_command_exists(cmd):
 def main():
     print_section("TELEOP SYSTEM VALIDATION - NO CHANGES MODE")
     
-    teleop_dir = Path("/Users/ziguo/teleop_system")
+    teleop_dir = Path("/Users/ziguo/drt")
     
     if not teleop_dir.exists():
         print_error(f"Teleop directory not found: {teleop_dir}")
@@ -92,7 +92,7 @@ def main():
         print_section("MOCK BACKEND VALIDATION")
         print_info("This will test the server with a simulated robot (no MuJoCo needed)")
         print("\nIn your terminal, run:")
-        print(f"{BOLD}cd /Users/ziguo/teleop_system{RESET}")
+        print(f"{BOLD}cd /Users/ziguo/drt{RESET}")
         print(f"{BOLD}python run_server.py --backend mock{RESET}")
         print("\nExpected output:")
         print("  - Server starts on http://0.0.0.0:8000")
@@ -110,7 +110,7 @@ def main():
         print_section("MUJOCO BACKEND VALIDATION")
         print_info("This will test the server with MuJoCo physics simulation")
         print("\nIn your terminal, run:")
-        print(f"{BOLD}cd /Users/ziguo/teleop_system{RESET}")
+        print(f"{BOLD}cd /Users/ziguo/drt{RESET}")
         print(f"{BOLD}python run_server.py --backend mujoco \\{RESET}")
         print(f"{BOLD}  --mujoco-xml robots/so101.xml \\{RESET}")
         print(f"{BOLD}  --mujoco-ee gripperframe{RESET}")

@@ -1,6 +1,6 @@
-# 🤖 Teleop System Quick Start Guide
+# 🤖 DRT Quick Start Guide
 
-Welcome to the Teleoperation System! This guide will help you get started with Simulation (MuJoCo), Real Robot Control (SO-ARM101), and Video Streaming.
+Welcome to the DRT (Distributed Robot Teleoperation) System! This guide will help you get started with Simulation (MuJoCo), Real Robot Control, and VR.
 
 ---
 
@@ -9,37 +9,27 @@ Welcome to the Teleoperation System! This guide will help you get started with S
 ### Prerequisites
 *   Python 3.10+
 *   Node.js & npm (for Web UI)
-*   **Hardware (Optional):** SO-ARM101 Robot Arm, Webcam/RealSense
+*   **Hardware (Optional):** SO-ARM101, Realman Robot, Quest 3, Webcam/RealSense
 
 ### Setup Environment
 ```bash
 # 1. Clone the repository
 git clone <repo_url>
-cd teleop_system
+cd drt
 
 # 2. Install Python dependencies
 pip install -r requirements.txt
-
-# 3. Install LeRobot (Required for Real Robot)
-# Follow instructions at: https://github.com/huggingface/lerobot
-# Or typically: pip install lerobot
 ```
 
 ---
 
-## 🎮 2. Running in Simulation (Mock/MuJoCo)
+## 🎮 2. Running in Simulation (MuJoCo)
 
 Best for testing the UI and network without hardware.
 
-### Start the Server (Mock Mode)
+### Start the Server
 ```bash
-# Runs a mock backend that simulates a robot responding to commands
-python server/teleop_server.py --backend mock
-```
-
-### Start the Server (MuJoCo Physics)
-```bash
-# Requires MuJoCo installed
+# Requires MuJoCo installed (pip install mujoco)
 python server/teleop_server.py --backend mujoco
 ```
 
@@ -55,45 +45,46 @@ python -m http.server 3000
     *   `W/S`: Forward/Backward (X)
     *   `A/D`: Left/Right (Y)
     *   `Q/E`: Up/Down (Z)
-    *   `Space`: Toggle Gripper
+    *   `J/L`: Yaw Rotation
+    *   See [Keyboard Controls](docs/KEYBOARD_CONTROLS.md) for full details.
 
 ---
 
-## 🦾 3. Running Real Robot (SO-ARM101)
+## 🥽 3. Running in VR (Quest 3)
 
-Control the physical SO-ARM101 robot arm.
+Control the robot using VR controllers with stereoscopic vision.
 
-### Hardware Setup
-1.  Connect SO-ARM101 via USB.
-2.  Find the port (e.g., `/dev/tty.usbmodem...` on Mac or `/dev/ttyUSB0` on Linux).
-3.  Ensure 12V power is connected.
+1.  **Start Server:** `python server/teleop_server.py --backend mujoco` (or real robot)
+2.  **Start Web Server:** `python -m http.server 3000` (in `client/web`)
+3.  **Connect Quest:** Open Browser in Quest and navigate to `http://YOUR_COMPUTER_IP:3000/vr.html`
+4.  **Enter VR:** Click "Enter VR" button.
 
-### Start Server with Robot
-```bash
-# Replace with your actual port
-python server/teleop_server.py --backend soarm --robot-port /dev/tty.usbmodem5B3E1187881
-```
-
-*   **Safety Note:** The robot will sync to its current position on startup.
-*   **Emergency Stop:** Press `Ctrl+C` in the terminal or close the browser tab to stop.
+For detailed VR setup (including USB tethering for low latency), see [VR Setup Guide](docs/VR_SETUP.md).
 
 ---
 
-## 📹 4. Video Streaming
+## 🦾 4. Running Real Robot
 
-The system supports multiple video sources.
-
-### Local Webcam (USB)
-The `soarm` backend automatically detects USB webcams (ID 0-9).
-*   Just start the server with `--backend soarm`.
-*   The video will appear in the Web UI automatically.
-
-### External Source (e.g., Isaac Sim / OBS)
-You can push MJPEG frames to the server via HTTP:
+### SO-ARM101
 ```bash
-# Example: Send a test image
-curl -X POST -H "Content-Type: image/jpeg" --data-binary @test.jpg http://localhost:8000/api/v1/video/ingest
+python server/teleop_server.py --backend soarm --robot-port /dev/tty.usbmodem...
 ```
+
+### Realman (Coming Soon)
+Support for Realman RM65/75 is integrated.
+```bash
+python server/teleop_server.py --backend realman --robot-ip 192.168.1.10
+```
+
+For detailed hardware setup, see [Real Robot Setup](docs/SOARM_SETUP.md).
+
+---
+
+## 📹 5. Video Streaming
+
+The system supports multiple video sources (Webcam, RealSense, Isaac Sim).
+*   **Local:** Webcams are auto-detected.
+*   **Remote:** MJPEG streams supported.
 
 ---
 
@@ -101,18 +92,8 @@ curl -X POST -H "Content-Type: image/jpeg" --data-binary @test.jpg http://localh
 
 | Issue | Solution |
 | :--- | :--- |
-| **"Missing motors" error** | The system now auto-adapts. Check USB connection and power. |
-| **Robot moves sluggishly** | We increased speed limits. Check if `max_velocity` in client is set too low. |
-| **Wrist spins 180°** | Anti-flip guard is active. Try moving to a less extreme position. |
-| **Port access denied** | Run with `sudo` or check user permissions (`dialout` group). |
+| **"Missing motors" error** | Check USB connection and power. |
+| **Robot moves sluggishly** | Check `max_velocity` limits. |
+| **VR Not Connecting** | Ensure Quest is on same WiFi or use USB tethering. |
 
----
-
-## 📂 Project Structure
-*   `server/`: Python FastAPI backend & Robot Logic
-    *   `teleop_server.py`: Main entry point
-    *   `backends/soarm_backend.py`: Real robot driver
-*   `client/web/`: HTML/JS Frontend
-*   `configs/`: Robot URDFs and settings
-
-Happy Teleoperating! 🕹️
+See [docs/](docs/) for more troubleshooting guides.

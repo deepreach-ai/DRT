@@ -4,7 +4,7 @@
 
 set -e  # Exit on error
 
-TELEOP_DIR="/Users/ziguo/teleop_system"
+TELEOP_DIR="/Users/ziguo/drt"
 cd "$TELEOP_DIR"
 
 echo "======================================"

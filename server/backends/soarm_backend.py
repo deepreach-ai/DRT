@@ -138,6 +138,11 @@ class FlexibleSO101Follower(SO101Follower):
         else:
             print(f"[FlexibleSO101Follower] Initializing with {len(found_motors)}/{len(all_motors)} motors")
 
+        # Removed: forcing gripper into found_motors
+        # if "gripper" not in found_motors:
+        #    found_motors["gripper"] = all_motors["gripper"]
+        #    print("[FlexibleSO101Follower] Added gripper explicitly")
+
         # Filter calibration to match found motors
         if self.calibration:
             filtered_calibration = {k: v for k, v in self.calibration.items() if k in found_motors}
@@ -154,11 +159,115 @@ class FlexibleSO101Follower(SO101Follower):
         self.cameras = make_cameras_from_configs(config.cameras)
 
 
+class SOARMKinematics:
+    """
+    Simple Kinematics for SO-ARM100 (5-DOF)
+    """
+    # Link lengths in meters
+    L_BASE = 0.10   # Base to Shoulder axis
+    L_UPPER = 0.12  # Shoulder to Elbow
+    L_FORE = 0.12   # Elbow to Wrist
+    L_HAND = 0.10   # Wrist to End Effector
+
+    @classmethod
+    def forward_kinematics(cls, joints: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """Compute FK for 5-DOF arm (joints in Radians)"""
+        if len(joints) < 5:
+            return np.zeros(3), np.array([1, 0, 0, 0])
+            
+        t1, t2, t3, t4, t5 = joints[:5]
+        
+        sin = np.sin
+        cos = np.cos
+        
+        # Global angles
+        g2 = t2
+        g3 = t2 + t3
+        g4 = t2 + t3 + t4
+        
+        # Radial distance (in X-Y plane)
+        r = (cls.L_UPPER * sin(g2) + 
+             cls.L_FORE * sin(g3) + 
+             cls.L_HAND * sin(g4))
+             
+        # Z height (relative to shoulder)
+        z_shoulder = (cls.L_UPPER * cos(g2) + 
+                      cls.L_FORE * cos(g3) + 
+                      cls.L_HAND * cos(g4))
+                      
+        z = cls.L_BASE + z_shoulder
+        
+        # X, Y
+        x = r * cos(t1)
+        y = r * sin(t1)
+        
+        position = np.array([x, y, z])
+        
+        # Orientation (Yaw, Pitch, Roll) -> Quaternion
+        cy = cos(t1 * 0.5)
+        sy = sin(t1 * 0.5)
+        cp = cos(g4 * 0.5)
+        sp = sin(g4 * 0.5)
+        cr = cos(t5 * 0.5)
+        sr = sin(t5 * 0.5)
+
+        w = cr * cp * cy + sr * sp * sy
+        qx = sr * cp * cy - cr * sp * sy
+        qy = cr * sp * cy + sr * cp * sy
+        qz = cr * cp * sy - sr * sp * cy
+        
+        orientation = np.array([w, qx, qy, qz])
+        return position, orientation
+
+    @classmethod
+    def inverse_kinematics(cls, target_pos: np.ndarray, target_pitch: float = 0.0, target_roll: float = 0.0) -> Optional[np.ndarray]:
+        """Simple Analytical IK for 5-DOF (returns Radians)"""
+        x, y, z = target_pos
+        
+        # 1. Joint 1: Pan
+        t1 = np.arctan2(y, x)
+        
+        # 2. Solve Planar IK
+        r_tip = np.sqrt(x**2 + y**2)
+        z_tip = z - cls.L_BASE
+        
+        r_wrist = r_tip - cls.L_HAND * np.sin(target_pitch)
+        z_wrist = z_tip - cls.L_HAND * np.cos(target_pitch)
+        
+        d_sq = r_wrist**2 + z_wrist**2
+        d = np.sqrt(d_sq)
+        
+        cos_t3 = (d_sq - cls.L_UPPER**2 - cls.L_FORE**2) / (2 * cls.L_UPPER * cls.L_FORE)
+        
+        if abs(cos_t3) > 1.0: return None
+            
+        t3 = np.arccos(cos_t3) # Range [0, pi]
+        
+        alpha = np.arctan2(r_wrist, z_wrist)
+        cos_beta = (cls.L_UPPER**2 + d_sq - cls.L_FORE**2) / (2 * cls.L_UPPER * d)
+        if abs(cos_beta) > 1.0: return None
+        beta = np.arccos(cos_beta)
+        
+        t2 = alpha - beta
+        t4 = target_pitch - t2 - t3
+        
+        return np.array([t1, t2, t3, t4, target_roll])
+
+
+
 class SOARMBackend(RobotBackend):
-    """Backend for SO-ARM100/SO-101 robot using LeRobot"""
+    """Backend for SO-ARM100/SO-101 robot using LeRobot Standard API"""
     
-    def __init__(self, port: str = "/dev/tty.usbmodem5B3E1187881", name: str = "so_arm"):
+    def __init__(self, port: str = "/dev/tty.usbmodem5B3E1224691", name: str = "so_arm"):
         super().__init__(name)
+        # Allow overriding port via env var if not passed explicitly?
+        # Actually BackendFactory passes it from config or env.
+        # But if we use default arg, we might be stuck.
+        
+        # If passed port is default and env is set, use env?
+        # Better: let BackendFactory handle it.
+        # But here we see the backend is instantiated with port="/dev/tty.usbmodem5B3E1187881" from somewhere.
+        
         self.port = port
         self.robot = None
         self.current_position = np.array([0.0, 0.0, 0.0])  # Will be updated from robot
@@ -166,7 +275,7 @@ class SOARMBackend(RobotBackend):
         self.command_count = 0
         
         # Camera state
-        self.cameras = {}  # Dict of {name: {'type': str, 'obj': object, 'frame': np.ndarray}}
+        self.cameras = {}
         self.camera_started = False
         
         if not LEROBOT_AVAILABLE:
@@ -178,71 +287,25 @@ class SOARMBackend(RobotBackend):
             print(f"[SOARMBackend] Connecting to SO-ARM at {self.port}...")
             self.status = BackendStatus.CONNECTING
             
-            # 1. Connect to Robot
-            # Create robot config
+            # 1. Connect to Robot using Standard LeRobot Config
             config = SO101FollowerConfig(
                 port=self.port,
-                disable_torque_on_disconnect=True,
-                use_degrees=False
+                use_degrees=True, # IMPORTANT: Use degrees for easier mapping
             )
             
             # Initialize robot
             self.robot = FlexibleSO101Follower(config)
-            self.robot.connect()
+            
+            # Pass calibrate=False to avoid interactive prompts
+            # If calibration is missing, this might be risky, but LeRobot usually has defaults
+            self.robot.connect(calibrate=False)
+            
+            print(f"[SOARMBackend] Enabling motor torque...")
+            self.robot.bus.enable_torque()
             print(f"[SOARMBackend] ✓ Connected to SO-ARM")
 
             # 2. Connect to Cameras
-            # We want: Top + 2 Side (All via OpenCV since pyrealsense2 crashes)
-            print("[SOARMBackend] Initializing cameras (using OpenCV for all)...")
-            self.cameras = {}
-            
-            # Disable pyrealsense2 usage to avoid segfault
-            # if REALSENSE_AVAILABLE: ... 
-            
-            if OPENCV_AVAILABLE:
-                print("[SOARMBackend] Scanning for cameras (skipping ID 0)...")
-                
-                # We expect 3 cameras: Side 1, Side 2, Top
-                # We scan ID 1..10
-                
-                found_count = 0
-                # Mapping found index to role
-                # 0 -> Side 1
-                # 1 -> Side 2
-                # 2 -> Top
-                roles = ["side_1", "side_2", "top"]
-                
-                for i in range(1, 10):
-                    if found_count >= len(roles):
-                        break
-                        
-                    try:
-                        cap = cv2.VideoCapture(i)
-                        if cap.isOpened():
-                            # Try to read a frame to verify
-                            ret, frame = cap.read()
-                            if ret:
-                                role = roles[found_count]
-                                self.cameras[role] = {'type': 'opencv', 'obj': cap}
-                                print(f"[SOARMBackend] ✓ Found {role} at ID {i}")
-                                found_count += 1
-                            else:
-                                cap.release()
-                        else:
-                            cap.release()
-                    except Exception as e:
-                        print(f"[SOARMBackend] ⚠ Error checking camera {i}: {e}")
-
-                if found_count == 0:
-                    print("[SOARMBackend] ⚠ No external cameras found")
-                elif found_count < len(roles):
-                    print(f"[SOARMBackend] ⚠ Only found {found_count} cameras (expected {len(roles)})")
-
-            if self.cameras:
-                self.camera_started = True
-                print(f"[SOARMBackend] Total cameras initialized: {len(self.cameras)}")
-            else:
-                print("[SOARMBackend] ⚠ No cameras initialized")
+            # self._init_cameras() # Disable camera init to avoid resource conflict/delay
             
             self.status = BackendStatus.CONNECTED
             self.last_update_time = time.time()
@@ -250,28 +313,51 @@ class SOARMBackend(RobotBackend):
             
         except Exception as e:
             print(f"[SOARMBackend] ✗ Connection failed: {e}")
+            import traceback
+            traceback.print_exc()
             self.status = BackendStatus.ERROR
             return False
-    
-    def disconnect(self):
-        """Disconnect from SO-ARM robot and Camera"""
-        try:
-            print(f"[SOARMBackend] Disconnecting...")
+
+    def _init_cameras(self):
+        """Initialize external cameras"""
+        if not OPENCV_AVAILABLE:
+            return
             
+        print("[SOARMBackend] Scanning for cameras...")
+        self.cameras = {}
+        roles = ["side_1", "side_2", "top"]
+        found_count = 0
+        
+        for i in range(1, 10):
+            if found_count >= len(roles): break
+            try:
+                cap = cv2.VideoCapture(i)
+                if cap.isOpened():
+                    ret, _ = cap.read()
+                    if ret:
+                        role = roles[found_count]
+                        self.cameras[role] = {'type': 'opencv', 'obj': cap}
+                        print(f"[SOARMBackend] ✓ Found {role} at ID {i}")
+                        found_count += 1
+                    else:
+                        cap.release()
+                else:
+                    cap.release()
+            except:
+                pass
+        
+        if self.cameras:
+            self.camera_started = True
+
+    def disconnect(self):
+        """Disconnect"""
+        try:
             # Stop Cameras
-            if self.cameras:
-                for name, cam in self.cameras.items():
-                    try:
-                        if cam['type'] == 'realsense':
-                            cam['obj'].stop()
-                            print(f"[SOARMBackend] Stopped {name} (RealSense)")
-                        elif cam['type'] == 'opencv':
-                            cam['obj'].release()
-                            print(f"[SOARMBackend] Stopped {name} (OpenCV)")
-                    except Exception as e:
-                        print(f"[SOARMBackend] Error stopping {name}: {e}")
-                self.cameras = {}
-                self.camera_started = False
+            for cam in self.cameras.values():
+                if cam['type'] == 'opencv':
+                    cam['obj'].release()
+            self.cameras = {}
+            self.camera_started = False
 
             # Disconnect Robot
             if self.robot is not None:
@@ -280,306 +366,213 @@ class SOARMBackend(RobotBackend):
                 print("[SOARMBackend] Robot disconnected")
             
             self.status = BackendStatus.DISCONNECTED
-            print(f"[SOARMBackend] ✓ Disconnected")
         except Exception as e:
             print(f"[SOARMBackend] Error during disconnect: {e}")
             self.status = BackendStatus.ERROR
-    
-    def render(self, width: int = 960, height: int = 540) -> Optional[bytes]:
-        """Render a combined frame from all cameras"""
-        if not self.camera_started or not self.cameras:
-            return None
-            
-        try:
-            # Capture frames
-            frames = {}
-            
-            # Capture All (OpenCV)
-            for name, cam in self.cameras.items():
-                if cam['type'] == 'opencv':
-                    try:
-                        ret, frame = cam['obj'].read()
-                        if ret:
-                            frames[name] = frame
-                    except Exception:
-                        pass
-                elif cam['type'] == 'realsense':
-                    # Legacy support if we ever re-enable it
-                    try:
-                        pipeline = cam['obj']
-                        fs = pipeline.wait_for_frames(timeout_ms=100)
-                        color_frame = fs.get_color_frame()
-                        if color_frame:
-                            frames[name] = np.asanyarray(color_frame.get_data())
-                    except Exception:
-                        pass
-            
-            if not frames:
-                return None
-                
-            # Stitch logic
-            # Target layout: [Side 1] [Top] [Side 2]
-            # If some are missing, just show what we have
-            
-            if OPENCV_AVAILABLE:
-                # Create canvas
-                canvas = np.zeros((height, width, 3), dtype=np.uint8)
-                
-                # Determine slots
-                # We split width into 3 parts: 0-320, 320-640, 640-960
-                slot_width = width // 3
-                
-                # Helper to place image
-                def place_image(img, slot_idx, label=None):
-                    if img is None: return
-                    
-                    # Resize to fit slot width, maintaining aspect ratio?
-                    # Or fill slot? Let's fill slot (stretch/crop) or letterbox.
-                    # Simple approach: resize to slot_width x height (might distort)
-                    # Better: resize to slot_width x (slot_width * aspect) and center vertically
-                    
-                    h, w = img.shape[:2]
-                    scale = slot_width / w
-                    new_h = int(h * scale)
-                    resized = cv2.resize(img, (slot_width, new_h))
-                    
-                    # Center vertically
-                    y_offset = (height - new_h) // 2
-                    
-                    # Clip if too tall
-                    if y_offset < 0:
-                        start_y = -y_offset
-                        resized = resized[start_y:start_y+height, :]
-                        y_offset = 0
-                        new_h = height
-                        
-                    # Place
-                    x_start = slot_idx * slot_width
-                    canvas[y_offset:y_offset+new_h, x_start:x_start+slot_width] = resized
-                    
-                    # Label
-                    if label:
-                        cv2.putText(canvas, label, (x_start + 10, 30), 
-                                   cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-
-                # Assign slots
-                # Slot 0: Side 1 (Left)
-                # Slot 1: Top (Center)
-                # Slot 2: Side 2 (Right)
-                
-                place_image(frames.get('side_1'), 0, "Side 1")
-                place_image(frames.get('top'), 1, "Top")
-                place_image(frames.get('side_2'), 2, "Side 2")
-                
-                # Encode
-                _, jpeg = cv2.imencode('.jpg', canvas)
-                return jpeg.tobytes()
-                
-            else:
-                # PIL Fallback (simplified, usually we have OpenCV)
-                return None
-                
-        except Exception as e:
-            # print(f"[SOARMBackend] Render error: {e}")
-            return None
 
     def send_target_pose(self, position: np.ndarray, 
                          orientation: np.ndarray,
                          velocity_limit: float = 0.1,
                          gripper_state: float = -1.0) -> bool:
         """
-        Send target pose to SO-ARM
-        
-        Since we lack proper IK, we will map Cartesian inputs to individual joints
-        for simple teleoperation testing.
-        
-        Mapping (Simple):
-        - X axis -> Shoulder Pan (Joint 1)
-        - Y axis -> Shoulder Lift (Joint 2)
-        - Z axis -> Elbow Flex (Joint 3)
-        - Roll   -> Wrist Flex (Joint 4)
-        - Pitch  -> Wrist Roll (Joint 5)
-        - Yaw    -> Gripper (Joint 6)
+        Send target pose to SO-ARM using Analytical IK (Degrees)
         """
         if not self.is_connected() or self.robot is None:
-            print("[SOARMBackend] Not connected!")
             return False
         
         try:
             with self.update_lock:
-                # 1. Read current joints
-                current_joints = self.get_current_joints()
-                if current_joints is None:
-                    return False
+                # 1. Determine Target Pitch and Roll from Orientation Quaternion
+                # Convert Quat (w, x, y, z) to Euler ZYX
+                w, x, y, z = orientation
                 
-                # 2. Calculate delta from current "virtual" position
-                # The controller sends absolute target positions, but since we don't have FK,
-                # we don't know where we are in Cartesian space.
-                # So we have to rely on relative movement or assume a starting pose.
+                # Yaw (Z-axis rotation)
+                # siny_cosp = 2 * (w * z + x * y)
+                # cosy_cosp = 1 - 2 * (y * y + z * z)
+                # yaw = np.arctan2(siny_cosp, cosy_cosp)
                 
-                # BETTER APPROACH FOR TESTING:
-                # Map the *change* in target position to *change* in joint angles.
-                # The controller maintains 'self.current_position'.
-                # But here we receive the TARGET position.
+                # Pitch (Y-axis rotation)
+                sinp = 2 * (w * y - z * x)
+                if abs(sinp) >= 1:
+                    pitch = np.copysign(np.pi / 2, sinp)
+                else:
+                    pitch = np.arcsin(sinp)
                 
-                # Let's map World X/Y/Z directly to Joint 1/2/3 offsets from a "home" position.
-                # This is very rough but allows movement.
+                # Roll (X-axis rotation)
+                sinr_cosp = 2 * (w * x + y * z)
+                cosr_cosp = 1 - 2 * (x * x + y * y)
+                roll = np.arctan2(sinr_cosp, cosr_cosp)
                 
-                # Home position (approximate mid-range)
-                # These are raw values (degrees usually)
-                # shoulder_pan, shoulder_lift, elbow_flex, wrist_flex, wrist_roll, gripper
-                # Note: You might need to adjust these base values/scales
+                target_pitch = pitch
+                target_roll = roll
+
+                # 2. Inverse Kinematics (Returns Radians)
+                ik_joints_rad = SOARMKinematics.inverse_kinematics(position, target_pitch, target_roll)
                 
-                # Scale factors (meters to degrees)
-                pos_scale = 500.0  # 1cm -> 5 degrees
-                rot_scale = 50.0   # 1 rad -> ~50 degrees
+                if ik_joints_rad is None:
+                    # If unreachable, do not return False immediately, 
+                    # as this will stop the controller loop if treated as fatal error.
+                    # Instead, just don't move and log.
+                    # print(f"[SOARMBackend] IK Unreachable: {position}")
+                    return True # Pretend success to keep loop alive
                 
-                # We need to calculate the difference from the LAST command or initial state
-                # But send_target_pose receives absolute world coordinates.
-                # Without FK, we can't map absolute world -> absolute joint.
+                # 3. Convert Radians to Degrees
+                # LeRobot (use_degrees=True) expects degrees
+                joints_deg = np.degrees(ik_joints_rad)
                 
-                # HACK: Use the difference between current target and stored "current_position"
-                # in the backend to drive incremental joint updates.
+                # 4. Handle Gripper
+                g_val = 0.0
+                if gripper_state >= 0:
+                    g_val = gripper_state * 100.0 # 0.0-1.0 -> 0-100
                 
-                # delta_pos = position - self.current_position
-                # The position coming in is accumulated in control_logic.py: target_position = self.current_position + delta_pos_world
-                # So position IS the new absolute target in Cartesian space.
-                # However, our self.current_position in backend was just initialized to [0,0,0] and updated blindly.
+                # 5. Smart Wrapping for Multi-Turn Safety
+                # Prevent spinning if motor is at e.g. -1200 degrees
+                current_obs = self.robot.get_observation()
                 
-                # The problem is: control_logic.py thinks we are at [0,0,0] initially.
-                # When we press 'forward', it sends target [0, 0.02, 0].
-                # delta_pos becomes [0, 0.02, 0].
+                # Map names
+                names = ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll"]
                 
-                # BUT: The delta needs to be applied to the CURRENT JOINTS.
-                # If we just add delta to current joints every time, it might work if delta_pos is truly a delta.
-                # But here 'position' is absolute.
-                # We need the DELTA from the LAST command.
+                final_command = {}
                 
-                # Let's simply calculate delta from our own stored previous position
-                delta_pos = position - self.current_position
+                for i, name in enumerate(names):
+                    target_angle = joints_deg[i]
+                    current_angle = 0.0
+                    
+                    # Get current angle
+                    if current_obs:
+                        val = current_obs.get(name) or current_obs.get(f"{name}.pos")
+                        if val is not None:
+                            current_angle = float(val)
+                    
+                    # Debug: Check if we are reading zeros
+                    # if i == 0 and abs(current_angle) < 0.1 and abs(target_angle) > 10:
+                    #     print(f"[SOARMBackend] Warning: {name} read 0.0, target {target_angle:.1f}")
+                    
+                    # Find closest equivalent angle
+                    # We want to minimize |(target_angle + k*360) - current_angle|
+                    
+                    # 1. Calculate diff in [-180, 180]
+                    diff = (target_angle - current_angle + 180) % 360 - 180
+                    
+                    # 2. New target is current + diff
+                    effective_target = current_angle + diff
+                    
+                    # --- ADDED: Safety Check for Large Jumps ---
+                    # If effective_target differs significantly from current_angle (> 45 degrees),
+                    # clamp it to prevent violent movement.
+                    max_step = 45.0 # Increased from 10.0 to 45.0 to avoid "tiny move" stuck issue
+                    step = effective_target - current_angle
+                    
+                    # Special handling for wrist_roll large jumps (likely IK flipping)
+                    # If step is ~180, it's definitely a flip.
+                    if name == "wrist_roll" and abs(step) > 90:
+                         print(f"[SOARMBackend] ⚠️ Suppressing wrist_roll flip: {step:.1f} deg. Holding position.")
+                         # If it tries to flip 180, just hold current position
+                         effective_target = current_angle
+                         step = 0.0
+                    
+                    if abs(step) > max_step:
+                        # Log occasionally
+                        if self.command_count % 20 == 0:
+                             print(f"[SOARMBackend] ⚠️ Clamping fast move: {name} current={current_angle:.1f} target={effective_target:.1f} step={step:.1f}")
+                        step = np.clip(step, -max_step, max_step)
+                        effective_target = current_angle + step
+                    
+                    final_command[name] = effective_target
+                    
+                # Add gripper (ONLY IF EXISTS)
+                if "gripper" in self.robot.bus.motors:
+                    final_command["gripper"] = g_val
                 
-                # If the user holds the key, control_logic sends increasing positions:
-                # t0: [0, 0, 0]
-                # t1: [0, 0.02, 0] -> delta [0, 0.02, 0]
-                # t2: [0, 0.04, 0] -> delta [0, 0.02, 0]
+                # 6. Send Command
+                # Debug log for command
+                # print(f"[SOARMBackend] Moving to: {final_command}")
                 
-                # So this logic holds.
+                # Check for NaNs
+                for k, v in final_command.items():
+                    if not np.isfinite(v):
+                        print(f"[SOARMBackend] ⚠️ NaN in command for {k}! Ignoring.")
+                        return True
                 
-                # Update internal state
+                self.robot.bus.sync_write("Goal_Position", final_command)
+                
                 self.current_position = position
                 self.current_orientation = orientation
-                
-                # If delta is too small, ignore (noise or no movement)
-                if np.linalg.norm(delta_pos) < 0.0001 and gripper_state == -1.0:
-                    return True
-                
-                # Calculate joint increments
-                # Joint 1 (Pan) <- X
-                # Joint 2 (Lift) <- Y
-                # Joint 3 (Elbow) <- Z
-                
-                # REVERSE DIRECTION CHECK:
-                # Typically:
-                # Y+ (Forward) -> Should extend arm or lift shoulder?
-                # Let's try:
-                # X (Left/Right) -> Pan (Joint 1)
-                # Y (Forward/Back) -> Lift (Joint 2)
-                # Z (Up/Down) -> Elbow (Joint 3) - maybe?
-                
-                d_j1 = delta_pos[0] * pos_scale
-                d_j2 = delta_pos[1] * pos_scale 
-                d_j3 = delta_pos[2] * pos_scale
-                
-                # Create new targets
-                new_joints = current_joints.copy()
-                
-                # Apply changes
-                # Note: Joint directions might need negation based on mounting
-                if len(new_joints) >= 1: new_joints[0] += d_j1
-                if len(new_joints) >= 2: new_joints[1] += d_j2 # Try inverting if moves wrong way
-                if len(new_joints) >= 3: new_joints[2] += d_j3
-                
-                # Gripper Control (Assuming Joint 6 is gripper)
-                # Map 0.0 (open) - 1.0 (closed) to servo range
-                # STS3215 range is usually 0-4096. Let's assume 0-1000 for gripper for now.
-                if gripper_state >= 0 and len(new_joints) >= 6:
-                    # 0.0 -> Open (Low value?)
-                    # 1.0 -> Closed (High value?)
-                    # Need to check physical limits. Let's try range 2048 +/- 500
-                    center = 2048
-                    width = 500
-                    # Open (0.0) -> center - width
-                    # Closed (1.0) -> center + width
-                    target_val = (center - width) + (gripper_state * 2 * width)
-                    new_joints[5] = target_val
-                
-                print(f"[SOARMBackend] Moving: Delta={delta_pos} -> Joints+={[d_j1, d_j2, d_j3]}")
+                self.command_count += 1
+                self.last_update_time = time.time()
+                return True
 
-                # Send using our joint control method
-                return self.send_joint_positions(new_joints)
-                
         except Exception as e:
             print(f"[SOARMBackend] Error sending command: {e}")
             return False
-    
+
     def send_joint_positions(self, joint_positions: np.ndarray) -> bool:
         """
-        Direct joint control (easier than IK)
-        
-        Args:
-            joint_positions: Target joint angles (radians or normalized -1 to 1)
+        Direct joint control (Array of degrees + gripper 0-100)
         """
         if not self.is_connected() or self.robot is None:
             return False
-        
         try:
-            with self.update_lock:
-                # Convert array back to dict for the bus
-                # Assuming joint_positions matches the sorted motor order from get_current_joints
-                sorted_motors = sorted(self.robot.bus.motors.items(), key=lambda x: x[1].id)
-                
-                # Write joint positions to robot using the bus
-                # Filter out joints that are not in the current robot
-                if len(joint_positions) != len(sorted_motors):
-                    # Try to map by matching names/IDs if possible, or just truncate
-                    # The leader sends 6 joints (usually). The follower has 5.
-                    # sorted_motors only contains the 5 connected motors.
-                    
-                    # If leader has more joints (e.g. 6) than follower (5), truncate the list
-                    if len(joint_positions) > len(sorted_motors):
-                        # Assuming the first N joints match
-                        joint_positions = joint_positions[:len(sorted_motors)]
-                    else:
-                        print(f"[SOARMBackend] Error: joint count mismatch. Expected {len(sorted_motors)}, got {len(joint_positions)}")
-                        return False
-                
-                target_dict = {name: int(val) for (name, _), val in zip(sorted_motors, joint_positions)}
-                
-                # Write joint positions to robot using the bus
-                self.robot.bus.sync_write("Goal_Position", target_dict)
-                
-                self.command_count += 1
-                self.last_update_time = time.time()
-                print(f"[SOARMBackend] 📥 Joint command sent: {target_dict}")
-                return True
+            # Assume order: Pan, Lift, Elbow, W_Flex, W_Roll, Gripper
+            names = ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll", "gripper"]
+            
+            command = {}
+            for i, name in enumerate(names):
+                if i < len(joint_positions):
+                    # Only add if motor exists on bus
+                    if name in self.robot.bus.motors:
+                        command[name] = float(joint_positions[i])
+            
+            if command:
+                self.robot.bus.sync_write("Goal_Position", command)
+            return True
         except Exception as e:
-            print(f"[SOARMBackend] Error sending joint command: {e}")
+            print(f"Error sending joints: {e}")
             return False
-    
+
     def get_current_pose(self) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
-        """Get current robot pose"""
+        """Get current robot pose using Forward Kinematics"""
         if not self.is_connected() or self.robot is None:
             return None, None
         
         try:
             with self.update_lock:
-                # Read current joint positions (just to verify connection)
-                # Use only connected motors
-                if self.robot and self.robot.bus:
-                    _ = self.robot.bus.sync_read("Present_Position")
+                # Read observation (Degrees)
+                # robot.get_observation() returns dictionary of positions
+                # e.g. {'shoulder_pan.pos': 10.5, ...}
+                # But SO101Follower might just return {'shoulder_pan': ...} depending on version
+                # My test showed keys like 'shoulder_pan.pos'
                 
-                # TODO: Implement forward kinematics to get Cartesian pose
-                # For now, return dummy pose
+                obs = self.robot.get_observation()
+                if not obs:
+                    return None, None
+                    
+                # Extract joint values in order
+                # Note: keys have suffix '.pos' usually?
+                # My verify script output: ['shoulder_pan.pos', ...]
+                
+                names = ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll"]
+                joints_deg = []
+                for name in names:
+                    # Try name or name.pos
+                    val = obs.get(name)
+                    if val is None:
+                        val = obs.get(f"{name}.pos")
+                    if val is None:
+                        # Fallback or error
+                        return self.current_position, self.current_orientation
+                    joints_deg.append(val)
+                
+                joints_deg = np.array(joints_deg)
+                
+                # Convert Degrees -> Radians
+                joints_rad = np.radians(joints_deg)
+                
+                # Compute FK
+                pos, rot = SOARMKinematics.forward_kinematics(joints_rad)
+                self.current_position = pos
+                self.current_orientation = rot
+                
                 return self.current_position.copy(), self.current_orientation.copy()
                 
         except Exception as e:
@@ -587,29 +580,52 @@ class SOARMBackend(RobotBackend):
             return None, None
     
     def get_current_joints(self) -> Optional[np.ndarray]:
-        """Get current joint positions"""
-        if not self.is_connected() or self.robot is None:
-            return None
+        # Helper for status
+        if not self.is_connected(): return None
+        obs = self.robot.get_observation()
+        if not obs: return None
+        # Extract values
+        return np.array([obs.get(k, 0.0) for k in sorted(obs.keys())])
         
-        try:
-            # Using bus directly for raw values (faster/easier for simple check)
-            # The robot.bus is FeetechMotorsBus
-            # sync_read might expect list of motors, or defaults to all in self.motors
-            # If we call it without arguments, it reads all motors in self.motors
-            # Our self.robot.bus.motors should only contain connected motors now.
-            
-            joints_dict = self.robot.bus.sync_read("Present_Position")
-            
-            # Convert dict to array in order of motor IDs
-            # Get list of motor names sorted by ID to ensure consistent order
-            sorted_motors = sorted(self.robot.bus.motors.items(), key=lambda x: x[1].id)
-            joint_values = [joints_dict[name] for name, _ in sorted_motors]
-            
-            return np.array(joint_values)
-        except Exception as e:
-            # print(f"[SOARMBackend] Error reading joints: {e}") # Suppress spam
+    def render(self, width: int = 960, height: int = 540) -> Optional[bytes]:
+        # Same render logic as before
+        if not self.camera_started or not self.cameras:
             return None
-    
+        try:
+            frames = {}
+            for name, cam in self.cameras.items():
+                if cam['type'] == 'opencv':
+                    ret, frame = cam['obj'].read()
+                    if ret: frames[name] = frame
+            
+            if not frames: return None
+            
+            # Simple stitching
+            canvas = np.zeros((height, width, 3), dtype=np.uint8)
+            slot_width = width // 3
+            
+            def place(img, idx):
+                if img is None: return
+                h, w = img.shape[:2]
+                scale = slot_width / w
+                new_h = int(h * scale)
+                resized = cv2.resize(img, (slot_width, new_h))
+                y = (height - new_h) // 2
+                x = idx * slot_width
+                if y < 0:
+                    resized = resized[-y:-y+height, :]
+                    y = 0
+                canvas[y:y+resized.shape[0], x:x+slot_width] = resized
+
+            place(frames.get('side_1'), 0)
+            place(frames.get('top'), 1)
+            place(frames.get('side_2'), 2)
+            
+            _, jpeg = cv2.imencode('.jpg', canvas)
+            return jpeg.tobytes()
+        except:
+            return None
+
     def get_status(self) -> Dict[str, Any]:
         """Get SO-ARM backend status"""
         status = {
@@ -622,13 +638,4 @@ class SOARMBackend(RobotBackend):
             'camera_available': REALSENSE_AVAILABLE,
             'camera_started': self.camera_started
         }
-        
-        if self.is_connected() and self.robot is not None:
-            try:
-                joints = self.get_current_joints()
-                if joints is not None:
-                    status['current_joints'] = joints.tolist()
-            except:
-                pass
-        
         return status

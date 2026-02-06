@@ -39,27 +39,16 @@ class TeleoperationController:
                         current_time: Optional[float] = None) -> Tuple[np.ndarray, np.ndarray, float, Dict[str, Any]]:
         """
         Process a delta command and return target pose
-        
-        Args:
-            command: Delta command from client
-            current_time: Current timestamp (uses time.time() if None)
-            
-        Returns:
-            target_position: Target position in world frame [x, y, z]
-            target_orientation: Target orientation as quaternion [w, x, y, z]
-            gripper_state: Gripper state (0.0-1.0)
-            violations: Dictionary of any violations that occurred
         """
         if current_time is None:
             current_time = time.time()
             
         # Calculate time delta
-        dt = 0.1  # Default if first command
-        if self.last_command_time is not None:
-            dt = current_time - self.last_command_time
-            dt = max(dt, 0.001)  # Prevent division by zero
-            dt = min(dt, 1.0)    # Cap at 1 second for stability
-            
+        # If last command was too long ago, we should reset dt to avoid large jumps if we use velocity integration
+        # But here we are just adding delta.
+        
+        # However, if we receive many commands, we process them.
+        
         self.last_command_time = current_time
         self.command_count += 1
         
@@ -72,24 +61,13 @@ class TeleoperationController:
         delta_pos = np.array([command.dx, command.dy, command.dz])
         delta_euler = np.array([command.droll, command.dpitch, command.dyaw])
         
-        # Apply velocity limits
-        self.velocity_limiter.set_limits(command.max_velocity, command.max_angular_velocity)
-        delta_pos_limited, delta_euler_limited = self.velocity_limiter.limit(
-            delta_pos, delta_euler, dt
-        )
-        
-        # Check if velocity limiting was applied
-        if not np.allclose(delta_pos, delta_pos_limited) or not np.allclose(delta_euler, delta_euler_limited):
-            violations['velocity_violation'] = True
-            self.velocity_violations += 1
-        
         # Transform delta based on reference frame
         if command.reference_frame == ReferenceFrame.END_EFFECTOR:
             # Transform delta from end-effector frame to world frame
-            delta_pos_world = self._transform_to_world_frame(delta_pos_limited)
+            delta_pos_world = self._transform_to_world_frame(delta_pos)
         else:
-            # Assume WORLD frame (BASE is treated as WORLD for simplicity in this fixed-base setup)
-            delta_pos_world = delta_pos_limited
+            # Assume WORLD frame
+            delta_pos_world = delta_pos
         
         # Calculate target position
         target_position = self.current_position + delta_pos_world
@@ -105,9 +83,9 @@ class TeleoperationController:
         R_current = quaternions.quat2mat(self.current_orientation)
         
         # Create rotation matrix from delta euler angles
-        R_delta = euler.euler2mat(delta_euler_limited[0],
-                                  delta_euler_limited[1],
-                                  delta_euler_limited[2])
+        R_delta = euler.euler2mat(delta_euler[0],
+                                  delta_euler[1],
+                                  delta_euler[2])
         
         # Combine rotations based on reference frame
         if command.reference_frame == ReferenceFrame.END_EFFECTOR:

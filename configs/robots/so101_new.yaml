@@ -10,7 +10,7 @@ isaac_sim:
 real_robot:
   backend_type: "soarm"
   connection:
-    port: "/dev/ttyUSB0"
+    port: "/dev/tty.usbmodem5B3E1224691"
 
 workspace_limits:
   x: [-0.5, 0.5]

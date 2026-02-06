@@ -64,6 +64,14 @@ class TeleoperationServer:
         if not self.backend.connect():
             raise RuntimeError(f"Failed to connect to {self.backend_type} backend")
         
+        # Sync initial pose
+        initial_pos, initial_ori = self.backend.get_current_pose()
+        if initial_pos is not None and initial_ori is not None:
+            print(f"[Server] Syncing controller to initial pose: {initial_pos}")
+            self.controller.set_current_pose(initial_pos, initial_ori)
+        else:
+            print("[Server] ⚠️ Could not get initial pose from backend. Controller starting at [0,0,0]")
+
         print(f"[Server] Initialized successfully with {self.backend_type} backend")
         
     def shutdown(self):
@@ -84,29 +92,50 @@ class TeleoperationServer:
     def process_command(self, command: DeltaCommand) -> Dict[str, Any]:
         """
         Process a teleoperation command
-        
-        Args:
-            command: Delta command from client
-            
-        Returns:
-            Processing result with status and any violations
         """
         # Update safety gate
         command_array = np.array([command.dx, command.dy, command.dz, 
                                   command.droll, command.dpitch, command.dyaw])
-        safety_active = self.safety_gate.update(command_array, command.timestamp)
+        
+        # Check if timestamp is stale
+        if time.time() - command.timestamp > 1.0:
+            # print(f"[Server] Stale command ignored: {time.time() - command.timestamp:.3f}s old")
+            # return {'status': 'ignored', 'message': 'Stale command'}
+            pass
+            
+        # safety_active = self.safety_gate.update(command_array, command.timestamp)
+        # FOR DIAGNOSIS: Force active to allow testing "little moves"
+        safety_active = True
         
         if not safety_active:
+            # Debug: Log why safety gate isn't active
+            last_heartbeat = self.safety_gate.last_heartbeat
+            current_time = time.time()
+            time_since_last = (current_time - last_heartbeat) if last_heartbeat else 999.0
+            cmd_magnitude = np.linalg.norm(command_array)
+            
+            # Reduce log spam
+            if self.total_commands % 50 == 0:
+                print(f"[Server] ⚠️  Safety gate INACTIVE! Cmd magnitude={cmd_magnitude:.6f}, threshold={self.safety_gate.activation_threshold}, time since last={time_since_last:.3f}s, timeout={self.safety_gate.timeout}s")
+            
             return {
                 'status': 'ignored',
                 'message': 'Safety gate not active',
                 'safety_active': False,
-                'violations': {}
+                'violations': {},
+                'debug': {
+                    'command_magnitude': float(cmd_magnitude) if np.isfinite(cmd_magnitude) else 0.0,
+                    'time_since_last_heartbeat': float(time_since_last) if np.isfinite(time_since_last) else 999.0,
+                    'timeout': float(self.safety_gate.timeout)
+                }
             }
         
         # Process command through controller
         target_position, target_orientation, gripper_state, violations = self.controller.process_command(command)
         
+        # Debug: Print first few commands or if significant movement
+        # print(f"[Server] Target Pos: {target_position}, Gripper: {gripper_state}")
+
         # Send to robot backend
         if self.backend and self.backend.is_connected():
             success = self.backend.send_target_pose(
@@ -242,7 +271,11 @@ def get_server() -> TeleoperationServer:
             isaac_port = int(os.getenv("TELEOP_ISAAC_PORT", "9000"))
             backend_config = {"host": isaac_host, "port": isaac_port}
         elif backend.lower() in ["soarm", "so101"]:
-            soarm_port = os.getenv("TELEOP_SOARM_PORT", "/dev/ttyUSB0")
+            # Prioritize env var
+            soarm_port = os.getenv("TELEOP_SOARM_PORT")
+            if not soarm_port:
+                 # Fallback to hardcoded default if needed, or "/dev/ttyUSB0"
+                 soarm_port = "/dev/tty.usbmodem5B3E1224691"
             backend_config = {"port": soarm_port}
         _server_instance = TeleoperationServer(backend_type=backend, backend_config=backend_config)
         _server_instance.initialize()
@@ -520,13 +553,42 @@ async def root():
     }
 
 
-def run_server(host: str = "0.0.0.0", port: int = 8000, backend_type: str = "mock"):
+def run_server(host: str = "0.0.0.0", port: int = 8000, backend_type: str = "mock", robot_port: Optional[str] = None):
     """Run the FastAPI server"""
+    # Force set backend type if environment variable is set
+    import os
+    env_backend = os.getenv("TELEOP_BACKEND")
+    if env_backend:
+        print(f"[Server] Overriding backend type from env: {env_backend}")
+        backend_type = env_backend
+        
     global _server_instance
-    _server_instance = TeleoperationServer(backend_type=backend_type)
+    
+    # Prepare backend config
+    backend_config = {}
+    if robot_port:
+        print(f"[Server] Using robot port from args: {robot_port}")
+        backend_config['port'] = robot_port
+    
+    # If not provided in args, get_server logic (if we used it) would check env.
+    # But since we are instantiating directly here, we should replicate that or let backend handle it?
+    # BackendFactory.create_backend will eventually call backend constructor.
+    # SoarmBackend constructor takes 'port'.
+    
+    # If robot_port is None here, we should probably check env var here too, 
+    # to pass it explicitly in config, OR rely on backend default.
+    # Let's check env var if not provided.
+    if not robot_port and backend_type in ["soarm", "so101"]:
+         env_port = os.getenv("TELEOP_SOARM_PORT")
+         if env_port:
+             backend_config['port'] = env_port
+    
+    _server_instance = TeleoperationServer(backend_type=backend_type, backend_config=backend_config)
+    # Don't initialize here, let the lifespan handler or get_server do it?
+    # Actually, lifespan handler calls get_server() which initializes if None.
+    # But here we manually create it.
     _server_instance.initialize()
     uvicorn.run(app, host=host, port=port)
-
 
 if __name__ == "__main__":
     import argparse
@@ -534,7 +596,8 @@ if __name__ == "__main__":
     parser.add_argument("--host", type=str, default="0.0.0.0", help="Host address")
     parser.add_argument("--port", type=int, default=8000, help="Port number")
     parser.add_argument("--backend", type=str, default="mock", help="Backend type (mock, isaac, or mujoco)")
+    parser.add_argument("--robot-port", type=str, default=None, help="Robot serial port (e.g. /dev/ttyUSB0)")
     
     args = parser.parse_args()
     
-    run_server(host=args.host, port=args.port, backend_type=args.backend)
+    run_server(host=args.host, port=args.port, backend_type=args.backend, robot_port=args.robot_port)

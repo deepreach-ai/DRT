@@ -119,6 +119,14 @@ class MujocoRobotBackend(RobotBackend):
 
         self.status = BackendStatus.CONNECTING
         xml_path = self._cfg.xml_path or os.getenv("TELEOP_MUJOCO_XML")
+        
+        # Default to teleop_scene.xml if available and not specified
+        if not xml_path:
+            potential_scene = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "robots", "teleop_scene.xml")
+            if os.path.exists(potential_scene):
+                xml_path = potential_scene
+                print(f"[MuJoCo] Using default scene: {xml_path}")
+
         ee_site = self._cfg.ee_site or os.getenv("TELEOP_MUJOCO_EE_SITE")
         preferred_camera = self._cfg.camera or os.getenv("TELEOP_MUJOCO_CAMERA")
         if not ee_site:
@@ -165,6 +173,7 @@ class MujocoRobotBackend(RobotBackend):
         position: np.ndarray,
         orientation: np.ndarray,
         velocity_limit: float = 0.1,
+        gripper_state: float = -1.0,
     ) -> bool:
         if not self.is_connected():
             return False
@@ -173,9 +182,69 @@ class MujocoRobotBackend(RobotBackend):
             self._last_target_pos = np.array(position, dtype=float)
             self._last_target_quat = np.array(orientation, dtype=float)
             self._solve_ik(target_pos=self._last_target_pos, target_quat=self._last_target_quat, velocity_limit=velocity_limit)
+            
+            # Handle gripper for follower
+            if gripper_state >= 0:
+                self._set_gripper(gripper_state)
+                
             self._command_count += 1
             self.last_update_time = time.time()
         return True
+
+    def send_joint_positions(self, joint_positions: np.ndarray) -> bool:
+        """Update leader robot joints from teleop command"""
+        if not self.is_connected() or self._model is None or self._data is None:
+            return False
+
+        with self.update_lock:
+            # Map joints to leader_xxx joints
+            # Expected order: pan, lift, elbow, wrist_flex, wrist_roll, gripper
+            joint_names = [
+                "leader_shoulder_pan", "leader_shoulder_lift", "leader_elbow_flex",
+                "leader_wrist_flex", "leader_wrist_roll", "leader_gripper"
+            ]
+            
+            try:
+                for i, name in enumerate(joint_names):
+                    if i >= len(joint_positions):
+                        break
+                    
+                    try:
+                        jid = mujoco.mj_name2id(self._model, mujoco.mjtObj.mjOBJ_JOINT, name)
+                        if jid != -1:
+                            qpos_addr = self._model.jnt_qposadr[jid]
+                            # Assuming 1-DOF joints
+                            # Convert to float and set
+                            val = float(joint_positions[i])
+                            # Handle gripper mapping if needed (usually 0-100 or rad)
+                            # Leader teleop sends raw values (usually radians or degrees depending on config)
+                            # Assuming radians here as MuJoCo uses radians
+                            self._data.qpos[qpos_addr] = val
+                    except Exception:
+                        pass
+                
+                mujoco.mj_forward(self._model, self._data)
+                return True
+            except Exception as e:
+                print(f"[MuJoCo] Error setting joints: {e}")
+                return False
+
+    def _set_gripper(self, state: float) -> None:
+        """Set follower gripper state (0.0 to 1.0)"""
+        if self._model is None: return
+        try:
+            # Map 0-1 to joint range
+            name = "gripper"
+            jid = mujoco.mj_name2id(self._model, mujoco.mjtObj.mjOBJ_JOINT, name)
+            if jid != -1:
+                qpos_addr = self._model.jnt_qposadr[jid]
+                # Range usually -0.17 to 1.74
+                low = -0.17
+                high = 1.74
+                val = low + state * (high - low)
+                self._data.qpos[qpos_addr] = val
+        except:
+            pass
 
     def get_current_pose(self) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
         if not self.is_connected():
@@ -327,16 +396,18 @@ class MujocoRobotBackend(RobotBackend):
         def name2id(name: str) -> int:
             return mujoco.mj_name2id(self._model, mujoco.mjtObj.mjOBJ_SITE, name)
 
-        candidates = [preferred, "end_effector", "gripper", "tcp", "tool0", "ee"]
+        candidates = [preferred, "gripperframe", "end_effector", "gripper", "tcp", "tool0", "ee"]
         for c in candidates:
             try:
                 idx = name2id(c)
             except Exception:
                 continue
             if idx != -1:
+                print(f"[MuJoCo] Resolved EE site to: {c} (ID {idx})")
                 return int(idx)
 
         if getattr(self._model, "nsite", 0) > 0:
+            print(f"[MuJoCo] Warning: Could not resolve EE site '{preferred}'. Defaulting to site 0.")
             return 0
         return None
 

@@ -88,6 +88,7 @@
 
 **🎉 最新进展 / Latest Progress (2026-02-05):**
 - ✅ SO-ARM101后端完全实现并测试通过 / SO-ARM101 backend fully implemented and tested
+- ✅ 修复腕部翻转和移动卡顿问题 / Fixed wrist flip and sluggish movement issues
 - ✅ 添加USB端口配置支持 / Added USB port configuration support
 - ✅ 创建本地测试脚本 / Created local testing scripts
 - ✅ 完整部署文档已编写 / Complete deployment documentation written
@@ -102,6 +103,7 @@
 - [x] **Deployment Documentation**
 - [x] **Quick Start Guide**
 - [x] **Deployment Checklist**
+- [x] **Wrist Anti-Flip & Safety Tuning** (New)
 - [ ] **AWS Deployment** (Ready to deploy)
 - [ ] **USA Testing** (Pending deployment)
 - [ ] **Realman SDK Integration** (Future)

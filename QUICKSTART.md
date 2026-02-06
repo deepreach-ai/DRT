@@ -1,221 +1,118 @@
-# Quick Start Guide - Web Teleoperation
+# 🤖 Teleop System Quick Start Guide
 
-## 🚀 Test the Web UI (Before Hardware Arrives)
+Welcome to the Teleoperation System! This guide will help you get started with Simulation (MuJoCo), Real Robot Control (SO-ARM101), and Video Streaming.
 
-### Step 1: Start the Teleoperation Server
+---
+
+## 🚀 1. Installation
+
+### Prerequisites
+*   Python 3.10+
+*   Node.js & npm (for Web UI)
+*   **Hardware (Optional):** SO-ARM101 Robot Arm, Webcam/RealSense
+
+### Setup Environment
 ```bash
-cd /Users/ziguo/teleop_system
+# 1. Clone the repository
+git clone <repo_url>
+cd teleop_system
 
-# Start with Mock backend (no robot needed)
-python run_server.py --backend mock
+# 2. Install Python dependencies
+pip install -r requirements.txt
 
-# Or with Isaac Sim backend (if you have it running)
-# python run_server.py --backend isaac
+# 3. Install LeRobot (Required for Real Robot)
+# Follow instructions at: https://github.com/huggingface/lerobot
+# Or typically: pip install lerobot
 ```
 
-The server will start on `http://localhost:8000`
+---
 
-### Step 2: Start the Web UI Server
-Open a **new terminal**:
+## 🎮 2. Running in Simulation (Mock/MuJoCo)
+
+Best for testing the UI and network without hardware.
+
+### Start the Server (Mock Mode)
 ```bash
-cd /Users/ziguo/teleop_system
-
-# Start web UI server
-python client/web_server.py
+# Runs a mock backend that simulates a robot responding to commands
+python server/teleop_server.py --backend mock
 ```
 
-The web UI will be available at `http://localhost:8080`
-
-### Step 3: Open Browser and Test!
-1. Open browser to `http://localhost:8080`
-2. Click "Connect to Robot"
-3. Try keyboard controls:
-   - **W/S**: Up/Down
-   - **A/D**: Left/Right
-   - **Q/E**: Forward/Backward
-   - **1**: Activate Safety (must press first!)
-   - **M**: Toggle mode
-
-Or use the virtual joystick buttons on screen!
-
----
-
-## 📊 What You Should See
-
-### Initial State:
-```
-✅ Web page loads with blue gradient background
-✅ Status shows "Disconnected" and "Safety Inactive"
-✅ Virtual joystick buttons visible
-✅ Video placeholder says "Video Stream Not Available"
-```
-
-### After Clicking "Connect":
-```
-✅ Status changes to "Connected"
-✅ WebSocket connects to backend
-✅ Can send commands using keyboard or buttons
-✅ Statistics update (command count, latency, uptime)
-```
-
-### After Pressing "1" (Activate Safety):
-```
-✅ Status shows "Safety Active" in green
-✅ Robot will now respond to movement commands
-✅ Commands are being sent at 20Hz
-```
-
----
-
-## 🧪 Testing Checklist
-
-Before hardware arrives, verify:
-
-- [ ] Web UI loads without errors (check browser console)
-- [ ] WebSocket connects to server
-- [ ] Safety activation works (press "1")
-- [ ] Position control works (W/A/S/D/Q/E keys)
-- [ ] Orientation control works (press M, then I/J/K/L/U/O)
-- [ ] Virtual joystick buttons work (mouse/touch)
-- [ ] Statistics update (command count increases)
-- [ ] Latency is reasonable (<50ms on localhost)
-- [ ] Disconnect button works
-- [ ] Reconnect works after disconnect
-
----
-
-## 🎯 Next Steps (This Week)
-
-### 1. Add Video Streaming
-Currently the video placeholder shows "not available". You need to add:
-
-**Option A: Test with Isaac Sim (if you have it)**
-- Isaac Sim has built-in cameras
-- Export frames and stream to web UI
-
-**Option B: Wait for RealSense D455**
-- Will provide real robot camera feed
-- 848×480 @ 90fps RGB + Depth
-
-**Implementation**: Add video streaming endpoint to server:
-```python
-# In server/teleop_server.py
-@app.get("/api/v1/video/stream")
-async def video_stream():
-    # Return MJPEG stream or setup WebRTC
-    pass
-```
-
-### 2. Deploy to Cloud (Test Mexico → USA Latency)
+### Start the Server (MuJoCo Physics)
 ```bash
-# Deploy to AWS/Azure/etc
-# Get public IP
-# Test from different locations
+# Requires MuJoCo installed
+python server/teleop_server.py --backend mujoco
 ```
 
-### 3. Add Session Recording
-```python
-# Record commands + video for review
-# Save to disk with timestamp
-# Implement playback feature
+### Start the Web UI
+Open a new terminal:
+```bash
+cd client/web
+# Open index.html in your browser directly, OR serve it:
+python -m http.server 3000
+# Visit: http://localhost:3000
+```
+*   **Controls:**
+    *   `W/S`: Forward/Backward (X)
+    *   `A/D`: Left/Right (Y)
+    *   `Q/E`: Up/Down (Z)
+    *   `Space`: Toggle Gripper
+
+---
+
+## 🦾 3. Running Real Robot (SO-ARM101)
+
+Control the physical SO-ARM101 robot arm.
+
+### Hardware Setup
+1.  Connect SO-ARM101 via USB.
+2.  Find the port (e.g., `/dev/tty.usbmodem...` on Mac or `/dev/ttyUSB0` on Linux).
+3.  Ensure 12V power is connected.
+
+### Start Server with Robot
+```bash
+# Replace with your actual port
+python server/teleop_server.py --backend soarm --robot-port /dev/tty.usbmodem5B3E1187881
 ```
 
-### 4. Show Demo to Chris!
-Once you have:
-- ✅ Web UI working
-- ✅ Mock backend responding
-- ✅ Basic controls functional
-
-→ Schedule demo with Chris to show progress before hardware arrives!
+*   **Safety Note:** The robot will sync to its current position on startup.
+*   **Emergency Stop:** Press `Ctrl+C` in the terminal or close the browser tab to stop.
 
 ---
 
-## 🔧 Troubleshooting
+## 📹 4. Video Streaming
 
-### "Cannot connect to server"
-- Make sure `run_server.py` is running on port 8000
-- Check firewall settings
-- Try `http://localhost:8000/docs` to see if server is up
+The system supports multiple video sources.
 
-### "WebSocket connection failed"
-- Server must support WebSocket (FastAPI already does)
-- Check browser console for error messages
-- Verify URL in `teleop.js` matches your server
+### Local Webcam (USB)
+The `soarm` backend automatically detects USB webcams (ID 0-9).
+*   Just start the server with `--backend soarm`.
+*   The video will appear in the Web UI automatically.
 
-### "Safety Inactive" won't change
-- Press "1" key or click the "⚡ Activate" button
-- Check server logs for safety activation
-- Try POST to `http://localhost:8000/api/v1/safety/activate`
-
-### Keyboard controls not working
-- Make sure browser window has focus
-- Check browser console for JavaScript errors
-- Try virtual joystick buttons instead
+### External Source (e.g., Isaac Sim / OBS)
+You can push MJPEG frames to the server via HTTP:
+```bash
+# Example: Send a test image
+curl -X POST -H "Content-Type: image/jpeg" --data-binary @test.jpg http://localhost:8000/api/v1/video/ingest
+```
 
 ---
 
-## 📝 Current System Status
+## 🛠️ Troubleshooting
 
-### ✅ What You Have:
-- FastAPI backend with WebSocket support
-- Mock backend for testing (no robot needed)
-- Isaac Sim backend (if you have Isaac Sim)
-- Safety gate system
-- Control logic with workspace limits
-- **NEW**: Web UI with virtual joystick
-- **NEW**: Keyboard control support
-- **NEW**: Real-time statistics display
-
-### ❌ What's Missing (Pre-Hardware):
-- Video streaming (waiting for RealSense D455)
-- Session recording
-- Authentication/login
-- SO-ARM100 backend (waiting for robot)
-
-### 🎯 What's Coming (When Hardware Arrives):
-- RealSense D455 integration
-- SO-ARM100 robot control
-- Real video streaming @ 90fps
-- VR interface (Meta Quest 3 or Pico 4)
+| Issue | Solution |
+| :--- | :--- |
+| **"Missing motors" error** | The system now auto-adapts. Check USB connection and power. |
+| **Robot moves sluggishly** | We increased speed limits. Check if `max_velocity` in client is set too low. |
+| **Wrist spins 180°** | Anti-flip guard is active. Try moving to a less extreme position. |
+| **Port access denied** | Run with `sudo` or check user permissions (`dialout` group). |
 
 ---
 
-## 💡 Tips
+## 📂 Project Structure
+*   `server/`: Python FastAPI backend & Robot Logic
+    *   `teleop_server.py`: Main entry point
+    *   `backends/soarm_backend.py`: Real robot driver
+*   `client/web/`: HTML/JS Frontend
+*   `configs/`: Robot URDFs and settings
 
-1. **Test thoroughly with Mock backend**
-   - No risk of damaging hardware
-   - Fast iteration on UI/UX
-   - Validate all features work
-
-2. **Measure baseline latency**
-   - Test on local network first
-   - Then test over internet
-   - Document latency numbers for Chris
-
-3. **Get feedback early**
-   - Show Chris the web UI demo
-   - Ask Mexico operators what they need
-   - Iterate based on real user feedback
-
-4. **Document everything**
-   - Take screenshots of working UI
-   - Record demo video
-   - Write setup instructions for operators
-
----
-
-## 🎉 Success Metrics
-
-Your Week 1 demo is successful if:
-- ✅ Chris can open browser and control robot (mock)
-- ✅ Latency is measured and reasonable
-- ✅ Safety system works
-- ✅ No crashes during 10+ minute session
-- ✅ You can explain the architecture clearly
-
-**You're 80% done with Phase 1!** Just need:
-- Video streaming (can mock for now)
-- Session recording
-- Deploy to test USA ↔ Mexico latency
-
-Keep going! 🚀
+Happy Teleoperating! 🕹️

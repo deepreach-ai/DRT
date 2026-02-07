@@ -34,6 +34,10 @@ tar -czf /tmp/drt.tar.gz \
     --exclude='__pycache__' \
     --exclude='*.pyc' \
     --exclude='.DS_Store' \
+    --exclude='robots' \
+    --exclude='assets' \
+    --exclude='server/recordings' \
+    --exclude='librealsense' \
     .
 
 echo "✓ Code packaged"

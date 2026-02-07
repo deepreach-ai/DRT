@@ -160,7 +160,10 @@ class IsaacSimTCPClient:
     def init_sim(self):
         print("Initializing simulation world...")
         self.world = World(stage_units_in_meters=1.0)
-        self.world.scene.add_default_ground_plane()
+        try:
+            self.world.scene.add_default_ground_plane()
+        except Exception as e:
+            print(f"⚠️ Warning: Could not add default ground plane (Nucleus offline?): {e}")
         
         # Add lighting
         from pxr import UsdLux, UsdGeom
@@ -187,7 +190,11 @@ class IsaacSimTCPClient:
         self.rgb_annotator.attach([self.render_product])
         
         # Load robot
-        assets_root = get_assets_root_path()
+        try:
+            assets_root = get_assets_root_path()
+        except Exception as e:
+            print(f"⚠️ Warning: Could not get assets root path: {e}")
+            assets_root = None
         
         # Check if local path exists
         if os.path.exists(self.robot_usd):

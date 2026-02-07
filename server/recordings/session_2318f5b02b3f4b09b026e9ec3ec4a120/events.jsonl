@@ -1,3 +1,0 @@
-{"type": "session_start", "ts": 1769158093.8217459, "username": "operator"}
-{"type": "state", "ts": 1769158093.8219562, "payload": {"type": "state", "ts": 1769158093.8219562, "status": {"is_active": false, "safety_gate_active": false, "last_command_time": 0.0, "robot_connected": true, "backend_type": "mock", "workspace_violation": false, "velocity_violation": false}, "robot": {"position": [0.0, 0.0, 0.5], "orientation": [1.0, 0.0, 0.0, 0.0], "status": "connected", "timestamp": 1769158093.8219562}}}
-{"type": "session_end", "ts": 1769158093.8269298}

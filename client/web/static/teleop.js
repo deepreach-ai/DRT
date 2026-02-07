@@ -51,6 +51,13 @@ class TeleopClient {
             'o': { axis: 'droll', value: 1 },    // Roll right
         };
         
+        // VR Input
+        this.vrInput = {
+            dx: 0, dy: 0, dz: 0,
+            droll: 0, dpitch: 0, dyaw: 0,
+            gripper: -1
+        };
+        
         this.init();
     }
     
@@ -252,6 +259,10 @@ class TeleopClient {
         }
     }
     
+    updateVRInput(input) {
+        this.vrInput = { ...this.vrInput, ...input };
+    }
+
     sendCommand() {
         if (!this.connected || !this.ws) return;
         
@@ -284,6 +295,17 @@ class TeleopClient {
                 command[axis] += value * this.orientationIncrement;
             }
         });
+
+        // Add VR Input
+        command.dx += this.vrInput.dx;
+        command.dy += this.vrInput.dy;
+        command.dz += this.vrInput.dz;
+        command.droll += this.vrInput.droll;
+        command.dpitch += this.vrInput.dpitch;
+        command.dyaw += this.vrInput.dyaw;
+        if (this.vrInput.gripper >= 0) {
+            command.gripper_state = this.vrInput.gripper;
+        }
         
         // Send command (even if zero - acts as heartbeat)
         try {

@@ -641,8 +641,53 @@
       function renderVRFrame(time, frame) {
         if (!frame || !state.inVR) return;
         
-        // TODO: Read controller input
-        // TODO: Send control commands to robot
+        // Handle Controller Input
+        const session = frame.session;
+        let inputSource = null;
+        for (const source of session.inputSources) {
+            if (source.handedness === 'right') {
+                inputSource = source;
+                break;
+            }
+        }
+
+        if (inputSource && inputSource.gamepad && window.teleopClient) {
+            const gp = inputSource.gamepad;
+            const axes = gp.axes; // Standard: [2]=X, [3]=Y for thumbstick on XR gamepad
+            // Note: Mapping varies. Usually 2/3 are thumbstick on Oculus Touch via WebXR
+            const ax_x = axes[2] || 0;
+            const ax_y = axes[3] || 0;
+            const buttons = gp.buttons;
+            
+            // Deadzone
+            const deadzone = 0.1;
+            const speed_scale = 0.02; // Max 0.02m per 50ms tick = 0.4m/s
+
+            let dx = 0, dy = 0, dz = 0;
+            
+            // Joystick -> Robot X/Y (Forward/Left)
+            // Joystick Up (y < -0.1) -> Forward (Robot X+)
+            if (Math.abs(ax_y) > deadzone) dx = -ax_y * speed_scale;
+            // Joystick Left (x < -0.1) -> Left (Robot Y+)
+            if (Math.abs(ax_x) > deadzone) dy = -ax_x * speed_scale;
+            
+            // Buttons -> Z (Up/Down)
+            // A (4) / B (5)
+            if (buttons[5] && buttons[5].pressed) dz = speed_scale; // B -> Up
+            if (buttons[4] && buttons[4].pressed) dz = -speed_scale; // A -> Down
+            
+            // Trigger -> Gripper
+            let gripper = -1;
+            if (buttons[0]) gripper = buttons[0].value; // 0..1
+
+            // Update Teleop Client
+            window.teleopClient.updateVRInput({
+                dx: dx,
+                dy: dy,
+                dz: dz,
+                gripper: gripper
+            });
+        }
         
         renderer.render(scene, camera);
       }

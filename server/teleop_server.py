@@ -553,7 +553,7 @@ async def root():
     }
 
 
-def run_server(host: str = "0.0.0.0", port: int = 8000, backend_type: str = "mock", robot_port: Optional[str] = None):
+def run_server(host: str = "0.0.0.0", port: int = 8000, backend_type: str = "mock", robot_port: Optional[str] = None, ssl_keyfile: Optional[str] = None, ssl_certfile: Optional[str] = None):
     """Run the FastAPI server"""
     # Force set backend type if environment variable is set
     import os
@@ -588,7 +588,12 @@ def run_server(host: str = "0.0.0.0", port: int = 8000, backend_type: str = "moc
     # Actually, lifespan handler calls get_server() which initializes if None.
     # But here we manually create it.
     _server_instance.initialize()
-    uvicorn.run(app, host=host, port=port)
+    
+    if ssl_keyfile and ssl_certfile:
+        print(f"[Server] Starting with SSL enabled (HTTPS)")
+        uvicorn.run(app, host=host, port=port, ssl_keyfile=ssl_keyfile, ssl_certfile=ssl_certfile)
+    else:
+        uvicorn.run(app, host=host, port=port)
 
 if __name__ == "__main__":
     import argparse

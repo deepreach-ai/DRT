@@ -27,6 +27,8 @@ def main():
     parser.add_argument("--soarm-port", help="USB port for SO-ARM robot (e.g. /dev/ttyUSB0)")
     parser.add_argument("--isaac-host", help="Isaac Sim host address")
     parser.add_argument("--isaac-port", type=int, help="Isaac Sim port")
+    parser.add_argument("--ssl-key", help="Path to SSL key file (for HTTPS/WebXR)")
+    parser.add_argument("--ssl-cert", help="Path to SSL cert file (for HTTPS/WebXR)")
     parser.add_argument("--no-server", action="store_true",
                        help="Initialize only, don't run server")
 
@@ -75,7 +77,8 @@ def main():
         # Run the full server
         print(f"Starting teleoperation server on {args.host}:{args.port}")
         print(f"Using backend: {args.backend}")
-        run_server(host=args.host, port=args.port, backend_type=args.backend)
+        run_server(host=args.host, port=args.port, backend_type=args.backend, 
+                  ssl_keyfile=args.ssl_key, ssl_certfile=args.ssl_cert)
 
 
 if __name__ == "__main__":

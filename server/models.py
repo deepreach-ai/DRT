@@ -42,6 +42,7 @@ class RobotState(BaseModel):
     """Current robot state"""
     position: Tuple[float, float, float]  # x, y, z in world frame
     orientation: Tuple[float, float, float, float]  # quaternion (w, x, y, z)
+    joints: List[float] = []  # Joint positions (radians)
     velocity: Tuple[float, float, float]
     angular_velocity: Tuple[float, float, float]
     timestamp: float

@@ -1,0 +1,174 @@
+<?xml version="1.0" ?>
+<mujoco model="realman_rm75b">
+  <compiler angle="radian" meshdir="realman_75/meshes" autolimits="true"/>
+  
+  <option timestep="0.002" integrator="implicit" impratio="2">
+    <flag warmstart="enable" gravity="enable"/>
+  </option>
+  
+  <visual>
+    <global offwidth="1920" offheight="1080"/>
+    <quality shadowsize="4096"/>
+    <map fogstart="3" fogend="5"/>
+  </visual>
+  
+  <asset>
+    <!-- Materials -->
+    <material name="robot_material" rgba="0.8 0.8 0.9 1"/>
+    <material name="joint_material" rgba="0.3 0.3 0.3 1"/>
+    
+    <!-- Textures for better VR visualization -->
+    <texture name="grid" type="2d" builtin="checker" width="512" height="512" 
+             rgb1="0.2 0.3 0.4" rgb2="0.1 0.15 0.2"/>
+    <material name="grid_mat" texture="grid" texrepeat="10 10" texuniform="true"/>
+  </asset>
+  
+  <worldbody>
+    <!-- Ground plane for VR spatial reference -->
+    <geom name="ground" type="plane" size="2 2 0.01" rgba="0.2 0.25 0.3 1" material="grid_mat"/>
+    
+    <!-- Lighting for VR -->
+    <light directional="true" pos="1 1 3" dir="-1 -1 -2" diffuse="0.8 0.8 0.8"/>
+    <light directional="true" pos="-1 1 3" dir="1 -1 -2" diffuse="0.6 0.6 0.6"/>
+    
+    <!-- Robot base -->
+    <body name="base_link" pos="0 0 0.05">
+      <inertial pos="0.00049987 5.2709E-05 0.060019" mass="1.862" 
+                diaginertia="0.0017232 0.0017051 0.00090158"/>
+      <geom type="cylinder" size="0.08 0.03" rgba="0.3 0.3 0.3 1"/>
+      
+      <!-- Link 1 -->
+      <body name="link_1" pos="0 0 0.1265">
+        <inertial pos="0 0.00029 0.11489" mass="1.326" 
+                  diaginertia="0.00401578 0.00401359 0.00120239"/>
+        <joint name="joint_1" type="hinge" axis="0 0 1" 
+               range="-3.14 3.14" damping="2.0" armature="0.1"/>
+        <geom type="cylinder" size="0.065 0.06" rgba="0.7 0.7 0.8 1"/>
+        
+        <!-- Link 2 -->
+        <body name="link_2" pos="0 0 0.121">
+          <inertial pos="0.00001 -0.03887 0.09889" mass="1.547" 
+                    diaginertia="0.01004721 0.00974238 0.00173129"/>
+          <joint name="joint_2" type="hinge" axis="0 1 0" 
+                 range="-2.094 2.094" damping="2.0" armature="0.1"/>
+          <geom type="capsule" fromto="0 0 0 0 -0.04 0.1" size="0.05" 
+                rgba="0.6 0.7 0.9 1"/>
+          
+          <!-- Link 3 -->
+          <body name="link_3" pos="0 0 0.2085">
+            <inertial pos="0 0.03844 0.08783" mass="1.246" 
+                      diaginertia="0.00652018 0.00612084 0.00137572"/>
+            <joint name="joint_3" type="hinge" axis="0 1 0" 
+                   range="-2.967 2.967" damping="1.5" armature="0.08"/>
+            <geom type="capsule" fromto="0 0 0 0 0.04 0.09" size="0.045" 
+                  rgba="0.6 0.8 0.7 1"/>
+            
+            <!-- Link 4 -->
+            <body name="link_4" pos="0 0.0405 0.18475">
+              <inertial pos="-0.000013 -0.000051 -0.089629" mass="0.678" 
+                        diaginertia="0.001850887 0.001843382 0.000230011"/>
+              <joint name="joint_4" type="hinge" axis="0 0 1" 
+                     range="-2.356 2.356" damping="1.0" armature="0.05"/>
+              <geom type="cylinder" size="0.04 0.045" rgba="0.7 0.7 0.8 1"/>
+              
+              <!-- Link 5 -->
+              <body name="link_5" pos="0 0 -0.21">
+                <inertial pos="0.000078 -0.012937 -0.008781" mass="0.619" 
+                          diaginertia="0.000627336 0.000542455 0.000370291"/>
+                <joint name="joint_5" type="hinge" axis="0 0 1" 
+                       range="-3.106 3.106" damping="0.8" armature="0.04"/>
+                <geom type="cylinder" size="0.035 0.03" rgba="0.6 0.7 0.9 1"/>
+                
+                <!-- Link 6 -->
+                <body name="link_6" pos="0 -0.001 0">
+                  <inertial pos="-0.000014 -0.078524 0.002819" mass="0.602" 
+                            diaginertia="0.000780774 0.000289973 0.000763955"/>
+                  <joint name="joint_6" type="hinge" axis="0 1 0" 
+                         range="-2.234 2.234" damping="0.8" armature="0.04"/>
+                  <geom type="capsule" fromto="0 0 0 0 -0.07 0" size="0.03" 
+                        rgba="0.7 0.6 0.8 1"/>
+                  
+                  <!-- Link 7 (End Effector) -->
+                  <body name="link_7" pos="0 -0.144 0">
+                    <inertial pos="0.001094 -0.000077 -0.010119" mass="0.107" 
+                              diaginertia="0.000044123 0.000035078 0.000065445"/>
+                    <joint name="joint_7" type="hinge" axis="0 0 1" 
+                           range="-6.28 6.28" damping="0.5" armature="0.03"/>
+                    <geom type="cylinder" size="0.025 0.015" rgba="0.8 0.6 0.6 1"/>
+                    
+                    <!-- End effector site for IK control -->
+                    <site name="ee_site" pos="0 0 -0.05" size="0.015" 
+                          rgba="1 0 0 1" type="sphere"/>
+                    
+                    <!-- Gripper visualization (simple) -->
+                    <body name="gripper_base" pos="0 0 -0.08">
+                      <geom type="box" size="0.02 0.015 0.01" rgba="0.5 0.5 0.5 1"/>
+                      
+                      <!-- Left finger -->
+                      <body name="left_finger" pos="0 -0.015 -0.02">
+                        <joint name="gripper_left" type="slide" axis="0 1 0" 
+                               range="-0.02 0.01" damping="0.5"/>
+                        <geom type="box" size="0.01 0.005 0.025" rgba="0.4 0.4 0.4 1"/>
+                      </body>
+                      
+                      <!-- Right finger -->
+                      <body name="right_finger" pos="0 0.015 -0.02">
+                        <joint name="gripper_right" type="slide" axis="0 -1 0" 
+                               range="-0.02 0.01" damping="0.5"/>
+                        <geom type="box" size="0.01 0.005 0.025" rgba="0.4 0.4 0.4 1"/>
+                      </body>
+                    </body>
+                  </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+    
+    <!-- VR cameras -->
+    <camera name="vr_left_eye" pos="0.5 -0.5 0.8" xyaxes="0.866 0.5 0 -0.25 0.433 0.866" fovy="90"/>
+    <camera name="vr_right_eye" pos="0.5 -0.5 0.8" xyaxes="0.866 0.5 0 -0.25 0.433 0.866" fovy="90"/>
+    <camera name="tracking" pos="1.5 -1.5 1.2" xyaxes="0.707 0.707 0 -0.408 0.408 0.816" mode="trackcom"/>
+  </worldbody>
+  
+  <actuator>
+    <!-- Position control for all joints -->
+    <position name="actuator_1" joint="joint_1" kp="100" kv="10" forcerange="-87 87"/>
+    <position name="actuator_2" joint="joint_2" kp="100" kv="10" forcerange="-87 87"/>
+    <position name="actuator_3" joint="joint_3" kp="100" kv="10" forcerange="-87 87"/>
+    <position name="actuator_4" joint="joint_4" kp="80" kv="8" forcerange="-30 30"/>
+    <position name="actuator_5" joint="joint_5" kp="80" kv="8" forcerange="-10 10"/>
+    <position name="actuator_6" joint="joint_6" kp="60" kv="6" forcerange="-10 10"/>
+    <position name="actuator_7" joint="joint_7" kp="60" kv="6" forcerange="-10 10"/>
+    <position name="gripper_left_actuator" joint="gripper_left" kp="50" kv="5" forcerange="-5 5"/>
+    <position name="gripper_right_actuator" joint="gripper_right" kp="50" kv="5" forcerange="-5 5"/>
+  </actuator>
+  
+  <keyframe>
+    <!-- Home pose -->
+    <key name="home" qpos="0 0 0 0 0 0 0 0 0"/>
+    
+    <!-- Ready pose for VR teleoperation -->
+    <key name="ready" qpos="0 -0.5 0.8 0 0.5 0 0 0 0"/>
+    
+    <!-- Reach forward -->
+    <key name="reach" qpos="0 0.3 0.3 0 -0.6 0 0 0 0"/>
+  </keyframe>
+  
+  <sensor>
+    <!-- Joint position sensors -->
+    <jointpos name="joint_1_pos" joint="joint_1"/>
+    <jointpos name="joint_2_pos" joint="joint_2"/>
+    <jointpos name="joint_3_pos" joint="joint_3"/>
+    <jointpos name="joint_4_pos" joint="joint_4"/>
+    <jointpos name="joint_5_pos" joint="joint_5"/>
+    <jointpos name="joint_6_pos" joint="joint_6"/>
+    <jointpos name="joint_7_pos" joint="joint_7"/>
+    
+    <!-- End effector pose sensor -->
+    <framepos name="ee_pos" objtype="site" objname="ee_site"/>
+    <framequat name="ee_quat" objtype="site" objname="ee_site"/>
+  </sensor>
+</mujoco>

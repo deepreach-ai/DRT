@@ -8,8 +8,15 @@
     <!-- WebXR Polyfill for broader compatibility -->
     <script src="https://cdn.jsdelivr.net/npm/webxr-polyfill@latest/build/webxr-polyfill.js"></script>
     
-    <!-- Three.js for 3D rendering -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Import Map for Three.js and Loaders -->
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.137.0/build/three.module.js",
+            "urdf-loader": "https://unpkg.com/urdf-loader@0.12.1/dist/URDFLoader.js"
+        }
+    }
+    </script>
     
     <style>
       :root {
@@ -167,7 +174,28 @@
         height: 100%;
         display: none;
       }
+
+      /* Exit Button Overlay (Visible in Sim Mode or if VR UI fails) */
+      #exit-overlay {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 2000;
+        display: none;
+      }
       
+      #exit-overlay button {
+        background: rgba(255, 77, 79, 0.8);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        color: white;
+        padding: 10px 20px;
+        border-radius: 30px;
+        font-weight: bold;
+        backdrop-filter: blur(4px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        width: auto;
+      }
+
       .hidden { display: none !important; }
       
       /* Video elements (hidden, used as textures) */
@@ -182,10 +210,29 @@
         line-height: 1.6;
         margin-top: 16px;
       }
+      
+      #debug-log {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        height: 150px;
+        background: rgba(0,0,0,0.8);
+        color: #0f0;
+        font-family: monospace;
+        font-size: 12px;
+        padding: 10px;
+        overflow-y: auto;
+        z-index: 9999;
+        display: none; /* Hidden by default, toggle with 'D' key */
+        pointer-events: none;
+      }
     </style>
   </head>
   <body>
-    
+    <!-- Debug Log Overlay -->
+    <div id="debug-log"></div>
+
     <!-- 2D UI (Pre-VR) -->
     <div id="ui-2d">
       <div class="card">
@@ -199,6 +246,7 @@
             <div class="status-value" id="xr-support">
               <span class="pill warn">Checking...</span>
             </div>
+            <button id="btn-simulate-vr" class="secondary" style="font-size: 12px; padding: 8px; margin-top: 8px; background: rgba(79, 140, 255, 0.2); display: none;">👉 Enter Simulated VR Mode</button>
           </div>
           
           <div class="status-item">
@@ -254,13 +302,81 @@
     <!-- 3D Canvas for VR -->
     <canvas id="vr-canvas"></canvas>
     
+    <!-- Exit Overlay -->
+    <div id="exit-overlay">
+        <button id="btn-force-exit">✕ Exit VR</button>
+    </div>
+
     <!-- Hidden Video Elements (used as textures) -->
     <video id="video-left" autoplay muted playsinline></video>
     <video id="video-right" autoplay muted playsinline></video>
     <video id="video-depth" autoplay muted playsinline></video>
     
-    <!-- Main VR Application Script -->
+    <script src="static/teleop.js"></script>
+
+    <!-- Global Error Handler & Debug Log (Non-module to run first) -->
     <script>
+      // ========================================
+      // DEBUG LOGGING & ERROR HANDLING
+      // ========================================
+      const debugLogEl = document.getElementById('debug-log');
+      
+      function logToScreen(msg, type='info') {
+          if (!debugLogEl) return;
+          const line = document.createElement('div');
+          line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+          if (type === 'error') line.style.color = '#ff5555';
+          if (type === 'warn') line.style.color = '#ffaa55';
+          debugLogEl.appendChild(line);
+          debugLogEl.scrollTop = debugLogEl.scrollHeight;
+          
+          // Auto-show on error
+          if (type === 'error') {
+              debugLogEl.style.display = 'block';
+          }
+      }
+      
+      // Override console methods
+      const originalLog = console.log;
+      const originalWarn = console.warn;
+      const originalError = console.error;
+      
+      console.log = (...args) => {
+          originalLog(...args);
+          // Filter out spammy logs if needed
+          logToScreen(args.join(' '));
+      };
+      console.warn = (...args) => {
+          originalWarn(...args);
+          logToScreen(args.join(' '), 'warn');
+      };
+      console.error = (...args) => {
+          originalError(...args);
+          logToScreen(args.join(' '), 'error');
+      };
+
+      // Global Error Listeners
+      window.addEventListener('error', (event) => {
+          console.error(`Script Error: ${event.message} at ${event.filename}:${event.lineno}`);
+      });
+      
+      window.addEventListener('unhandledrejection', (event) => {
+          console.error(`Unhandled Promise Rejection: ${event.reason}`);
+      });
+      
+      // Show debug log on 'D' key
+      document.addEventListener('keydown', (e) => {
+          if (e.key.toLowerCase() === 'd' && e.shiftKey) {
+              if (debugLogEl) debugLogEl.style.display = debugLogEl.style.display === 'none' ? 'block' : 'none';
+          }
+      });
+    </script>
+
+    <!-- Main VR Application Script -->
+    <script type="module">
+      // Dynamic imports inside init to prevent module crash
+      let THREE, URDFLoader;
+      
       // ========================================
       // GLOBAL STATE
       // ========================================
@@ -276,7 +392,12 @@
           left: false,
           right: false,
           depth: false
-        }
+        },
+        // Controller State
+        lastControllerPose: null,
+        clutchActive: false,
+        // Robot Model
+        robot: null
       };
       
       // DOM Elements
@@ -297,8 +418,39 @@
       async function init() {
         console.log('[VR] Initializing...');
         
+        // Dynamic Import of 3D Engine
+        try {
+            console.log('[VR] Loading 3D Engine...');
+            const threeModule = await import('three');
+            THREE = threeModule;
+            window.THREE = THREE; // Expose globally
+            
+            const urdfModule = await import('urdf-loader');
+            URDFLoader = urdfModule.default;
+            console.log('[VR] 3D Engine loaded');
+        } catch (e) {
+            console.error('[VR] Failed to load 3D engine:', e);
+            // Continue anyway so connection logic works
+        }
+        
+        // Check Secure Context
+        if (!window.isSecureContext) {
+            console.warn('[VR] Insecure context detected. WebXR requires HTTPS or localhost.');
+            updateStatus('xr-support', 'HTTPS Required', 'bad');
+            alert('WebXR requires a Secure Context (HTTPS or localhost).\nPlease use the ngrok URL (https://...) or localhost.');
+        }
+
+        // Initialize WebXR Polyfill
+        if (window.WebXRPolyfill) {
+            new WebXRPolyfill();
+        }
+
         // Check WebXR support
-        checkXRSupport();
+        if (window.isSecureContext) {
+            checkXRSupport();
+        } else {
+             $('btn-simulate-vr').style.display = 'block';
+        }
         
         // Set up event listeners
         $('btn-connect').addEventListener('click', connectToServer);
@@ -306,13 +458,23 @@
         $('btn-disconnect').addEventListener('click', disconnect);
         $('btn-test-video').addEventListener('click', testVideoStreams);
         $('btn-calibrate').addEventListener('click', calibrateControllers);
+        $('btn-force-exit').addEventListener('click', exitVR);
         
-        // Auto-fill server URL if on same host
-        const currentHost = window.location.hostname;
-        if (currentHost && currentHost !== 'localhost') {
-          $('server-url').value = `http://${currentHost}:8000`;
-        }
+        // Global Keyboard Shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                console.log('[VR] ESC pressed, exiting VR...');
+                exitVR();
+            }
+        });
         
+        // Auto-fill server URL based on current page
+        // Use origin directly to support ngrok (no port 8000) and localhost (with port) correctly
+        $('server-url').value = window.location.origin;
+        
+        // Setup Simulate VR button
+        $('btn-simulate-vr').addEventListener('click', enterSimulatedVR);
+
         console.log('[VR] Initialization complete');
       }
       
@@ -328,16 +490,19 @@
               updateStatus('xr-support', 'Supported ✓', 'ok');
               console.log('[VR] WebXR is supported!');
             } else {
-              updateStatus('xr-support', 'Not Available', 'bad');
+              updateStatus('xr-support', 'Not Found (Use Simulator)', 'bad');
               console.warn('[VR] WebXR not supported on this device');
+              $('btn-simulate-vr').style.display = 'block';
             }
           } catch (err) {
-            updateStatus('xr-support', 'Error', 'bad');
+            updateStatus('xr-support', 'Error (Use Simulator)', 'bad');
             console.error('[VR] Error checking WebXR support:', err);
+            $('btn-simulate-vr').style.display = 'block';
           }
         } else {
-          updateStatus('xr-support', 'Not Available', 'bad');
+          updateStatus('xr-support', 'Not Found (Use Simulator)', 'bad');
           console.warn('[VR] navigator.xr not found');
+          $('btn-simulate-vr').style.display = 'block';
         }
       }
       
@@ -355,43 +520,81 @@
           return;
         }
         
-        state.serverUrl = serverUrl.replace(/\/$/, '');
+        // Ensure no trailing slash
+        let cleanUrl = serverUrl.replace(/\/$/, '');
+        
+        // Ensure protocol
+        if (!cleanUrl.startsWith('http')) {
+            // Default to https if not specified, unless local
+            if (cleanUrl.includes('localhost') || cleanUrl.includes('127.0.0.1')) {
+                cleanUrl = 'http://' + cleanUrl;
+            } else {
+                cleanUrl = 'https://' + cleanUrl;
+            }
+        }
+        
+        state.serverUrl = cleanUrl;
         
         try {
           updateStatus('server-status', 'Connecting...', 'warn');
+          console.log(`[VR] Connecting to ${cleanUrl}...`);
           
-          // Login
-          const loginRes = await fetch(`${state.serverUrl}/api/v1/auth/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, password })
-          });
+          // Login with timeout
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
           
-          if (!loginRes.ok) {
-            throw new Error('Login failed: ' + await loginRes.text());
+          try {
+              const loginRes = await fetch(`${cleanUrl}/api/v1/auth/login`, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'ngrok-skip-browser-warning': 'true'
+                },
+                body: JSON.stringify({ username, password }),
+                signal: controller.signal
+              });
+              clearTimeout(timeoutId);
+              
+              if (!loginRes.ok) {
+                throw new Error('Login failed: ' + await loginRes.text());
+              }
+              
+              const loginData = await loginRes.json();
+              state.token = loginData.token;
+              
+              console.log('[VR] Login successful, token received');
+              
+              if (!window.teleopClient) {
+                window.teleopClient = new TeleopClient();
+              }
+              // Set server URL explicitly
+              window.teleopClient.setServerUrl(cleanUrl);
+              window.teleopClient.setToken(loginData.token);
+              window.teleopClient.connect();
+              
+              // Initialize video streams
+              initVideoStreams();
+              
+              // Update UI
+              state.connected = true;
+              updateStatus('server-status', 'Connected ✓', 'ok');
+              loginSection.classList.add('hidden');
+              vrSection.classList.remove('hidden');
+              
+              console.log('[VR] Connected to server');
+          } catch (error) {
+              clearTimeout(timeoutId);
+              throw error;
           }
-          
-          const loginData = await loginRes.json();
-          state.token = loginData.token;
-          
-          // Connect WebSocket
-          await connectWebSocket(loginData.ws_url);
-          
-          // Initialize video streams
-          initVideoStreams();
-          
-          // Update UI
-          state.connected = true;
-          updateStatus('server-status', 'Connected ✓', 'ok');
-          loginSection.classList.add('hidden');
-          vrSection.classList.remove('hidden');
-          
-          console.log('[VR] Connected to server');
           
         } catch (err) {
           console.error('[VR] Connection error:', err);
           updateStatus('server-status', 'Failed', 'bad');
-          alert('Connection failed: ' + err.message);
+          
+          // Show debug log on error
+          if (debugLogEl) debugLogEl.style.display = 'block';
+          
+          alert('Connection failed: ' + (err?.message || 'Unknown error'));
         }
       }
       
@@ -447,6 +650,12 @@
       // VIDEO STREAMING
       // ========================================
       
+      const videoTextures = {
+          left: { texture: null, ctx: null, img: null },
+          right: { texture: null, ctx: null, img: null },
+          depth: { texture: null, ctx: null, img: null }
+      };
+
       function initVideoStreams() {
         console.log('[VR] Initializing video streams...');
         
@@ -455,20 +664,18 @@
         
         // Left camera (Arm 1)
         const leftUrl = `${state.serverUrl}/api/v1/video/left/mjpeg?token=${state.token}`;
-        setupVideoStream(videoLeft, leftUrl, 'left');
+        setupVideoStream(leftUrl, 'left');
         
         // Right camera (Arm 2)
         const rightUrl = `${state.serverUrl}/api/v1/video/right/mjpeg?token=${state.token}`;
-        setupVideoStream(videoRight, rightUrl, 'right');
+        setupVideoStream(rightUrl, 'right');
         
         // Depth camera
         const depthUrl = `${state.serverUrl}/api/v1/video/depth/mjpeg?token=${state.token}`;
-        setupVideoStream(videoDepth, depthUrl, 'depth');
+        setupVideoStream(depthUrl, 'depth');
       }
       
-      function setupVideoStream(videoElement, url, name) {
-        // For MJPEG, we use img element trick or fetch stream
-        // Simpler: Use img element with MJPEG URL
+      function setupVideoStream(url, name) {
         console.log(`[VR] Setting up ${name} stream:`, url);
         
         // Create image element for MJPEG
@@ -476,24 +683,44 @@
         img.crossOrigin = 'anonymous';
         img.src = url;
         
+        // Create Canvas and Texture immediately (don't wait for load)
+        const canvas = document.createElement('canvas');
+        canvas.width = 960; // Default size, will resize if needed
+        canvas.height = 540;
+        const ctx = canvas.getContext('2d');
+        
+        // Fill with placeholder initially
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '30px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(`Loading ${name}...`, canvas.width/2, canvas.height/2);
+
+        let texture = null;
+        if (THREE) {
+            texture = new THREE.CanvasTexture(canvas);
+            texture.minFilter = THREE.LinearFilter;
+            texture.magFilter = THREE.LinearFilter;
+        }
+        
+        // Store for update loop
+        videoTextures[name] = { texture, ctx, img, canvas };
+        
         img.onload = () => {
-          console.log(`[VR] ${name} stream loaded`);
+          console.log(`[VR] ${name} stream loaded (${img.width}x${img.height})`);
           state.videoStreams[name] = true;
+          canvas.width = img.width || 960;
+          canvas.height = img.height || 540;
           
-          // Copy to video element (for WebGL texture)
-          const ctx = document.createElement('canvas').getContext('2d');
-          const canvas = ctx.canvas;
-          canvas.width = img.width;
-          canvas.height = img.height;
-          
-          function updateFrame() {
-            ctx.drawImage(img, 0, 0);
-            requestAnimationFrame(updateFrame);
+          // Re-create texture if it was missing and THREE is now ready (edge case)
+          // Ideally, we wait for THREE before connecting, but this is safer
+          if (!videoTextures[name].texture && THREE) {
+              const t = new THREE.CanvasTexture(canvas);
+              t.minFilter = THREE.LinearFilter;
+              t.magFilter = THREE.LinearFilter;
+              videoTextures[name].texture = t;
           }
-          updateFrame();
-          
-          // Use canvas as video source
-          videoElement.srcObject = canvas.captureStream();
           
           updateVideoStatus();
         };
@@ -501,6 +728,15 @@
         img.onerror = (err) => {
           console.error(`[VR] ${name} stream error:`, err);
           state.videoStreams[name] = false;
+          
+          // Draw error on canvas
+          ctx.fillStyle = '#330000';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.fillStyle = '#ff0000';
+          ctx.fillText('Stream Error', canvas.width/2, canvas.height/2);
+          
+          if (texture) texture.needsUpdate = true;
+          
           updateVideoStatus();
         };
       }
@@ -510,6 +746,18 @@
         updateStatus('video-status', `${count}/3`, count === 3 ? 'ok' : 'warn');
       }
       
+      function updateVideoTextures() {
+          for (const key in videoTextures) {
+              const item = videoTextures[key];
+              if (item && item.img && item.ctx && item.texture && state.videoStreams[key]) {
+                  if (item.img.complete && item.img.naturalWidth > 0) {
+                      item.ctx.drawImage(item.img, 0, 0, item.canvas.width, item.canvas.height);
+                      item.texture.needsUpdate = true;
+                  }
+              }
+          }
+      }
+
       function testVideoStreams() {
         console.log('[VR] Testing video streams...');
         alert('Video test - check console for stream status');
@@ -520,6 +768,33 @@
       // VR MODE
       // ========================================
       
+      async function enterSimulatedVR() {
+         if (!state.connected) {
+          alert('Please connect to server first');
+          return;
+        }
+
+        console.log('[VR] Entering Simulated VR Mode...');
+        state.inVR = true;
+        state.simulated = true; // Flag for simulation
+
+        // Hide 2D UI
+        ui2d.style.display = 'none';
+        canvas.style.display = 'block';
+        $('exit-overlay').style.display = 'block';
+
+        // Initialize VR scene (without session)
+        await initVRScene(null);
+        
+        // Start render loop manually since we don't have XRSession
+        function animate() {
+            if (!state.inVR) return;
+            requestAnimationFrame(animate);
+            renderVRFrame(performance.now(), null);
+        }
+        animate();
+      }
+
       async function enterVR() {
         if (!state.connected) {
           alert('Please connect to server first');
@@ -534,10 +809,21 @@
         try {
           console.log('[VR] Requesting VR session...');
           
-          const session = await navigator.xr.requestSession('immersive-vr', {
-            requiredFeatures: ['local-floor'],
-            optionalFeatures: ['hand-tracking', 'layers']
-          });
+          let session;
+          try {
+              // Try with local-floor (preferred)
+              session = await navigator.xr.requestSession('immersive-vr', {
+                requiredFeatures: ['local-floor'],
+                optionalFeatures: ['hand-tracking', 'layers']
+              });
+          } catch (e) {
+              console.warn('[VR] local-floor not supported, trying fallback...');
+              // Fallback to viewer or local if local-floor fails
+              session = await navigator.xr.requestSession('immersive-vr', {
+                requiredFeatures: ['viewer'], // Minimal requirement
+                optionalFeatures: ['local-floor', 'local', 'hand-tracking', 'layers']
+              });
+          }
           
           state.xrSession = session;
           state.inVR = true;
@@ -560,14 +846,30 @@
         }
       }
       
+      function exitVR() {
+          console.log('[VR] Exiting VR Mode...');
+          if (state.xrSession) {
+              state.xrSession.end().catch(e => console.error('Error ending session:', e));
+          } else {
+              // Manual exit for simulated mode
+              onVRSessionEnd();
+          }
+      }
+      
       function onVRSessionEnd() {
         console.log('[VR] VR session ended');
         state.inVR = false;
         state.xrSession = null;
+        state.simulated = false;
         
         // Show 2D UI
         ui2d.style.display = 'flex';
         canvas.style.display = 'none';
+        $('exit-overlay').style.display = 'none';
+        
+        // Reset controller state
+        state.lastControllerPose = null;
+        state.clutchActive = false;
       }
       
       // ========================================
@@ -578,23 +880,42 @@
       let leftEyeScreen, rightEyeScreen, depthHUD;
       
       async function initVRScene(session) {
+        if (!THREE) {
+            console.error('[VR] Cannot init scene: THREE not loaded');
+            return;
+        }
         console.log('[VR] Initializing VR scene...');
         
         // Create Three.js scene
         scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x0b1220);
+        scene.background = new THREE.Color(0x111a2e);
         
         // Camera
-        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const cameraGroup = new THREE.Group();
+        cameraGroup.position.set(0, 1.6, 1); // Default user height 1.6m, back 1m
+        cameraGroup.add(camera);
+        scene.add(cameraGroup);
         
         // Renderer
         renderer = new THREE.WebGLRenderer({ 
           canvas: canvas,
-          antialias: true 
+          antialias: true,
+          alpha: true
         });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.xr.enabled = true;
-        renderer.xr.setSession(session);
+        
+        if (session) {
+            renderer.xr.enabled = true;
+            renderer.xr.setSession(session);
+            renderer.setAnimationLoop(renderVRFrame);
+        } else {
+            // Simulated VR setup
+            renderer.xr.enabled = false;
+        }
+
+        // Load Robot Model
+        if (typeof loadRobotModel !== 'undefined') loadRobotModel();
         
         // Create stereo video screens
         createVideoScreens();
@@ -604,42 +925,208 @@
         light.position.set(0, 20, 0);
         scene.add(light);
         
+        // Add Environment Reference (Grid & Axes)
+        const gridHelper = new THREE.GridHelper(10, 10, 0x444444, 0x222222);
+        scene.add(gridHelper);
+        
+        const axesHelper = new THREE.AxesHelper(1);
+        axesHelper.position.set(0, 0.01, 0); // Lift slightly to avoid z-fighting
+        scene.add(axesHelper);
+        
+        // Add a floating text hint
+        // (Optional: Could add TextGeometry but simpler to just ensure scene isn't empty)
+
         // Start render loop
-        renderer.setAnimationLoop(renderVRFrame);
+        if (session) {
+            renderer.setAnimationLoop(renderVRFrame);
+        }
         
         console.log('[VR] VR scene initialized');
       }
       
       function createVideoScreens() {
+        if (!THREE) return;
         // Left eye screen (shows left camera)
-        const leftTexture = new THREE.VideoTexture(videoLeft);
+        // Use pre-created texture if available, or create placeholder
+        const leftMat = new THREE.MeshBasicMaterial({ 
+            map: videoTextures.left.texture,
+            side: THREE.DoubleSide
+        });
         const leftGeometry = new THREE.PlaneGeometry(1.6, 0.9);
-        const leftMaterial = new THREE.MeshBasicMaterial({ map: leftTexture });
-        leftEyeScreen = new THREE.Mesh(leftGeometry, leftMaterial);
-        leftEyeScreen.position.set(-1, 1.5, -2);
+        leftEyeScreen = new THREE.Mesh(leftGeometry, leftMat);
+        leftEyeScreen.position.set(-0.85, 1.5, -2);
+        // Rotate slightly inward
+        leftEyeScreen.rotation.y = 0.15;
         scene.add(leftEyeScreen);
         
         // Right eye screen (shows right camera)
-        const rightTexture = new THREE.VideoTexture(videoRight);
+        const rightMat = new THREE.MeshBasicMaterial({ 
+            map: videoTextures.right.texture,
+            side: THREE.DoubleSide
+        });
         const rightGeometry = new THREE.PlaneGeometry(1.6, 0.9);
-        const rightMaterial = new THREE.MeshBasicMaterial({ map: rightTexture });
-        rightEyeScreen = new THREE.Mesh(rightGeometry, rightMaterial);
-        rightEyeScreen.position.set(1, 1.5, -2);
+        rightEyeScreen = new THREE.Mesh(rightGeometry, rightMat);
+        rightEyeScreen.position.set(0.85, 1.5, -2);
+        rightEyeScreen.rotation.y = -0.15;
         scene.add(rightEyeScreen);
         
         // Depth HUD (smaller, bottom center)
-        const depthTexture = new THREE.VideoTexture(videoDepth);
+        const depthMat = new THREE.MeshBasicMaterial({ 
+            map: videoTextures.depth.texture,
+            side: THREE.DoubleSide
+        });
         const depthGeometry = new THREE.PlaneGeometry(0.8, 0.45);
-        const depthMaterial = new THREE.MeshBasicMaterial({ map: depthTexture });
-        depthHUD = new THREE.Mesh(depthGeometry, depthMaterial);
-        depthHUD.position.set(0, 0.5, -2);
+        depthHUD = new THREE.Mesh(depthGeometry, depthMat);
+        depthHUD.position.set(0, 0.6, -1.8);
+        depthHUD.rotation.x = -0.2;
         scene.add(depthHUD);
         
         console.log('[VR] Video screens created');
       }
       
+      // Robot Loading
+      function loadRobotModel() {
+          if (!URDFLoader) return;
+          
+          // Get URDF from URL parameter or default to RM75-B for this system
+          const urlParams = new URLSearchParams(window.location.search);
+          const urdfName = urlParams.get('urdf') || 'RM75-B';
+          const urdfPath = `/assets/robots/${urdfName}.urdf`;
+          
+          console.log(`[VR] Loading robot model: ${urdfPath}`);
+          const loader = new URDFLoader();
+          
+          // Setup package resolution for RM75-B
+          loader.packages = { 
+              'RM75-B': '/assets/robots/realman_75',
+              'so101': '/assets/robots' 
+          };
+          
+          loader.load(urdfPath, result => {
+              state.robot = result;
+              
+              // Position robot (adjust based on scene)
+              state.robot.position.set(0, 0.8, -0.8);
+              
+              // URDF is Z-up. Three.js is Y-up.
+              state.robot.rotation.x = -Math.PI / 2;
+              
+              // Add shadows
+              state.robot.traverse(c => {
+                  if (c.isMesh) {
+                      c.castShadow = true;
+                      c.receiveShadow = true;
+                  }
+              });
+              
+              scene.add(state.robot);
+              console.log('[VR] Robot loaded successfully', state.robot);
+              
+              // Add a table for it to stand on
+              const tableGeom = new THREE.BoxGeometry(1, 0.8, 1);
+              const tableMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
+              const table = new THREE.Mesh(tableGeom, tableMat);
+              table.position.set(0, 0.4, -0.8);
+              table.receiveShadow = true;
+              scene.add(table);
+              
+          }, (progress) => {
+              // progress
+          }, (err) => {
+              console.error('[VR] Failed to load robot URDF:', err);
+              // Fallback to so101 if RM75-B fails
+              if (urdfName !== 'so101') {
+                  console.log('[VR] Falling back to so101.urdf');
+                  loader.load('/assets/robots/so101.urdf', res => {
+                      state.robot = res;
+                      state.robot.position.set(0, 0.8, -0.8);
+                      state.robot.rotation.x = -Math.PI / 2;
+                      scene.add(state.robot);
+                  });
+              }
+          });
+      }
+
+      function updateRobotJoints(joints) {
+          if (!state.robot || !joints) return;
+          
+          // Determine joint names based on the loaded robot
+          let jointNames = [];
+          if (state.robot.name === 'RM75-B' || state.robot.name === 'realman_rm75b') {
+              jointNames = ['joint_1', 'joint_2', 'joint_3', 'joint_4', 'joint_5', 'joint_6', 'joint_7'];
+          } else {
+              // Default to so101 names
+              jointNames = [
+                  'shoulder_pan', 
+                  'shoulder_lift', 
+                  'elbow_flex', 
+                  'wrist_flex', 
+                  'wrist_roll', 
+                  'gripper'
+              ];
+          }
+          
+          // Apply to URDF model
+          for (let i = 0; i < jointNames.length; i++) {
+              if (i >= joints.length) break;
+              const name = jointNames[i];
+              const val = joints[i];
+              
+              if (state.robot.joints[name]) {
+                  state.robot.joints[name].setJointValue(val);
+              }
+          }
+      }
+
+      // Bind to TeleopClient
+      // Wait for teleopClient to be initialized
+      const checkClientInterval = setInterval(() => {
+          if (window.teleopClient) {
+              clearInterval(checkClientInterval);
+              window.teleopClient.onStateUpdate = (robotState) => {
+                  if (robotState.joints) {
+                      updateRobotJoints(robotState.joints);
+                  }
+              };
+              console.log('[VR] Bound to TeleopClient state updates');
+          }
+      }, 500);
+
+      // Matrix to transform from VR Frame (Y-up, -Z-fwd, X-right) 
+      // to Robot Frame (Z-up, X-fwd, Y-left)
+      // X_rob = -Z_vr
+      // Y_rob = -X_vr
+      // Z_rob = Y_vr
+      let VR_TO_ROBOT, VR_TO_ROBOT_INV;
+      
+      // Initialize matrices after THREE loads
+      const initMatricesInterval = setInterval(() => {
+          if (THREE) {
+              clearInterval(initMatricesInterval);
+              VR_TO_ROBOT = new THREE.Matrix4().set(
+                 0,  0, -1,  0,
+                -1,  0,  0,  0,
+                 0,  1,  0,  0,
+                 0,  0,  0,  1
+              );
+              VR_TO_ROBOT_INV = new THREE.Matrix4().copy(VR_TO_ROBOT).invert();
+          }
+      }, 100);
+
       function renderVRFrame(time, frame) {
-        if (!frame || !state.inVR) return;
+        if (!state.inVR) return;
+        
+        // Update Video Textures from MJPEG streams
+        updateVideoTextures();
+
+        if (state.simulated) {
+             // Simulate Input (e.g. use mouse/keyboard to simulate joystick?)
+             // For now, just render scene
+             renderer.render(scene, camera);
+             return;
+        }
+
+        if (!frame) return;
         
         // Handle Controller Input
         const session = frame.session;
@@ -651,42 +1138,163 @@
             }
         }
 
+        let dx = 0, dy = 0, dz = 0;
+        let droll = 0, dpitch = 0, dyaw = 0;
+        let gripper = -1;
+
         if (inputSource && inputSource.gamepad && window.teleopClient) {
             const gp = inputSource.gamepad;
-            const axes = gp.axes; // Standard: [2]=X, [3]=Y for thumbstick on XR gamepad
-            // Note: Mapping varies. Usually 2/3 are thumbstick on Oculus Touch via WebXR
-            const ax_x = axes[2] || 0;
-            const ax_y = axes[3] || 0;
             const buttons = gp.buttons;
             
-            // Deadzone
-            const deadzone = 0.1;
-            const speed_scale = 0.02; // Max 0.02m per 50ms tick = 0.4m/s
+            // ------------------------------------------------
+            // 1. CLUTCH & 6-DoF POSE TRACKING
+            // ------------------------------------------------
+            // Use Grip button (usually index 1) as Clutch
+            const squeeze = buttons[1];
+            const isClutchPressed = squeeze && squeeze.pressed;
 
-            let dx = 0, dy = 0, dz = 0;
+            if (isClutchPressed) {
+                // Get controller pose in reference space
+                const refSpace = renderer.xr.getReferenceSpace();
+                const pose = frame.getPose(inputSource.gripSpace, refSpace);
+                
+                if (pose) {
+                    const currPos = pose.transform.position; // x, y, z
+                    const currRot = pose.transform.orientation; // x, y, z, w
+                    
+                    if (state.lastControllerPose) {
+                        // Calculate Deltas
+                        const prevPos = state.lastControllerPose.position;
+                        const prevRot = state.lastControllerPose.orientation;
+                        
+                        // --- Position Delta ---
+                        // Delta in VR frame
+                        const dPosVR = new THREE.Vector3().subVectors(currPos, prevPos);
+                        
+                        // Transform to Robot Frame
+                        dPosVR.applyMatrix4(VR_TO_ROBOT);
+                        
+                        // Apply scaling (optional, 1.0 for direct mapping)
+                        const POS_SCALE = 1.5; 
+                        dx = dPosVR.x * POS_SCALE;
+                        dy = dPosVR.y * POS_SCALE;
+                        dz = dPosVR.z * POS_SCALE;
+
+                        // --- Rotation Delta ---
+                        const qCurr = new THREE.Quaternion(currRot.x, currRot.y, currRot.z, currRot.w);
+                        const qPrev = new THREE.Quaternion(prevRot.x, prevRot.y, prevRot.z, prevRot.w);
+                        
+                        // Relative rotation: q_diff = q_curr * q_prev^-1
+                        const qDiff = qCurr.clone().multiply(qPrev.clone().invert());
+                        
+                        // Convert Quaternion delta to Euler delta (approximate for small angles)
+                        // Ideally we should transform the rotation axis
+                        // Transform quaternion to rotation matrix
+                        const mDiff = new THREE.Matrix4().makeRotationFromQuaternion(qDiff);
+                        
+                        // Transform basis: M_rob = T * M_vr * T^-1
+                        const mDiffRob = mDiff.clone().premultiply(VR_TO_ROBOT).multiply(VR_TO_ROBOT_INV);
+                        
+                        // Extract Euler angles from transformed matrix
+                        const euler = new THREE.Euler().setFromRotationMatrix(mDiffRob, 'XYZ');
+                        
+                        const ROT_SCALE = 1.0;
+                        droll = euler.x * ROT_SCALE;
+                        dpitch = euler.y * ROT_SCALE;
+                        dyaw = euler.z * ROT_SCALE;
+                    }
+
+                    // Update last pose
+                    state.lastControllerPose = {
+                        position: new THREE.Vector3().copy(currPos),
+                        orientation: new THREE.Quaternion(currRot.x, currRot.y, currRot.z, currRot.w)
+                    };
+                }
+            } else {
+                // Clutch released - reset tracking
+                state.lastControllerPose = null;
+                
+                // ------------------------------------------------
+                // 2. JOYSTICK FALLBACK (only if clutch not pressed)
+                // ------------------------------------------------
+                const axes = gp.axes;
+                const ax_x = axes[2] || 0;
+                const ax_y = axes[3] || 0;
+                
+                // Deadzone
+                const deadzone = 0.1;
+                const speed_scale = 0.02;
+
+                // Joystick -> Robot X/Y (Forward/Left)
+                // Joystick Up (y < -0.1) -> Forward (Robot X+)
+                if (Math.abs(ax_y) > deadzone) dx = -ax_y * speed_scale;
+                // Joystick Left (x < -0.1) -> Left (Robot Y+)
+                if (Math.abs(ax_x) > deadzone) dy = -ax_x * speed_scale;
+                
+                // Buttons -> Z (Up/Down)
+                // A (4) / B (5)
+                if (buttons[5] && buttons[5].pressed) dz = speed_scale; // B -> Up
+                if (buttons[4] && buttons[4].pressed) dz = -speed_scale; // A -> Down
+            }
             
-            // Joystick -> Robot X/Y (Forward/Left)
-            // Joystick Up (y < -0.1) -> Forward (Robot X+)
-            if (Math.abs(ax_y) > deadzone) dx = -ax_y * speed_scale;
-            // Joystick Left (x < -0.1) -> Left (Robot Y+)
-            if (Math.abs(ax_x) > deadzone) dy = -ax_x * speed_scale;
-            
-            // Buttons -> Z (Up/Down)
-            // A (4) / B (5)
-            if (buttons[5] && buttons[5].pressed) dz = speed_scale; // B -> Up
-            if (buttons[4] && buttons[4].pressed) dz = -speed_scale; // A -> Down
-            
+            // ------------------------------------------------
+            // 3. COMMON INPUTS (Trigger, etc)
+            // ------------------------------------------------
             // Trigger -> Gripper
-            let gripper = -1;
             if (buttons[0]) gripper = buttons[0].value; // 0..1
 
+            // ------------------------------------------------
+            // 4. SYSTEM CONTROLS (B Button - Exit)
+            // ------------------------------------------------
+            // Usually B button is index 5, but check mapping
+            // B button long press (> 1s) to exit VR
+            if (buttons[5] && buttons[5].pressed) {
+                if (!state.exitTimer) {
+                    state.exitTimer = Date.now();
+                } else if (Date.now() - state.exitTimer > 1000) {
+                    // Long press detected
+                    exitVR();
+                    state.exitTimer = null;
+                }
+            } else {
+                state.exitTimer = null;
+            }
+
             // Update Teleop Client
-            window.teleopClient.updateVRInput({
-                dx: dx,
-                dy: dy,
-                dz: dz,
-                gripper: gripper
-            });
+            // For Rate inputs (Joystick), we use updateVRInput (persistent)
+            // For Motion inputs (Clutch), we use accumulateVRMotion (transient)
+            
+            if (isClutchPressed) {
+                // Send accumulated motion
+                window.teleopClient.accumulateVRMotion({
+                    dx: dx,
+                    dy: dy,
+                    dz: dz,
+                    droll: droll,
+                    dpitch: dpitch,
+                    dyaw: dyaw
+                });
+                
+                // Clear rate inputs (so we don't double move if joystick is also touched)
+                window.teleopClient.updateVRInput({
+                    dx: 0, dy: 0, dz: 0, 
+                    droll: 0, dpitch: 0, dyaw: 0,
+                    gripper: gripper,
+                    reference_frame: 'base'
+                });
+            } else {
+                // Send rate inputs (Joystick)
+                window.teleopClient.updateVRInput({
+                    dx: dx,
+                    dy: dy,
+                    dz: dz,
+                    droll: droll,
+                    dpitch: dpitch,
+                    dyaw: dyaw,
+                    gripper: gripper,
+                    reference_frame: 'end_effector' // Joystick usually in EE frame or Camera frame
+                });
+            }
         }
         
         renderer.render(scene, camera);
@@ -715,12 +1323,11 @@
       }
       
       function disconnect() {
+        if (window.teleopClient) {
+          window.teleopClient.disconnect();
+        }
         if (state.xrSession) {
           state.xrSession.end();
-        }
-        
-        if (state.ws) {
-          state.ws.close();
         }
         
         state.connected = false;
@@ -737,6 +1344,15 @@
       // START
       // ========================================
       
+      // Basic fallback to ensure UI works even if module fails
+      if (!$('btn-connect').onclick && !$('btn-connect').dataset.listenerAttached) {
+          $('btn-connect').onclick = () => {
+              if (typeof connectToServer === 'undefined') {
+                  alert('System Error: Application script failed to load. Please refresh.');
+              }
+          };
+      }
+
       window.addEventListener('load', init);
       
     </script>

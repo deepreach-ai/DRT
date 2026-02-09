@@ -64,6 +64,15 @@ class RobotBackend(ABC):
             orientation: Current orientation as quaternion [w, x, y, z] or None
         """
         pass
+
+    def get_joint_positions(self) -> Optional[np.ndarray]:
+        """
+        Get current joint positions (radians)
+        
+        Returns:
+            joints: Array of joint positions or None if not available
+        """
+        return None
     
     @abstractmethod
     def get_status(self) -> Dict[str, Any]:

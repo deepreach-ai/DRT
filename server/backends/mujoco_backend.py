@@ -72,10 +72,10 @@ class MujocoBackendConfig:
     ee_site: Optional[str] = None
     camera: Optional[str] = None
     ik_damping: float = 0.05
-    ik_max_iters: int = 25
+    ik_max_iters: int = 15 # Reduced from 25 for lower latency
     ik_pos_weight: float = 1.0
     ik_rot_weight: float = 0.3
-    max_qpos_step: float = 0.12
+    max_qpos_step: float = 0.15 # Slightly increased from 0.12 for faster response
 
 
 class MujocoRobotBackend(RobotBackend):
@@ -86,10 +86,10 @@ class MujocoRobotBackend(RobotBackend):
         ee_site: Optional[str] = None,
         camera: Optional[str] = None,
         ik_damping: float = 0.05,
-        ik_max_iters: int = 25,
+        ik_max_iters: int = 15,
         ik_pos_weight: float = 1.0,
         ik_rot_weight: float = 0.3,
-        max_qpos_step: float = 0.12,
+        max_qpos_step: float = 0.15,
     ):
         super().__init__(name)
         self._cfg = MujocoBackendConfig(
@@ -370,6 +370,18 @@ class MujocoRobotBackend(RobotBackend):
         buf = BytesIO()
         img.save(buf, format="JPEG", quality=85)
         return buf.getvalue()
+
+    def get_joint_positions(self) -> Optional[np.ndarray]:
+        """
+        Get current joint positions (radians)
+        
+        Returns:
+            joints: Array of joint positions or None if not available
+        """
+        if not self.is_connected() or self._data is None:
+            return None
+        with self.update_lock:
+            return np.array(self._data.qpos, dtype=float)
 
     def get_status(self) -> Dict[str, Any]:
         pos, quat = (None, None)

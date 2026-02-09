@@ -1,0 +1,98 @@
+<?xml version='1.0' encoding='utf-8'?>
+<mujoco model="realman_rm75b_v2">
+  <compiler angle="radian" meshdir="realman_75/meshes" autolimits="true" />
+  <option timestep="0.002" integrator="implicit" impratio="2">
+    <flag warmstart="enable" gravity="enable" />
+  </option>
+  <visual>
+    <global offwidth="1920" offheight="1080" />
+    <quality shadowsize="4096" />
+    <map fogstart="3" fogend="5" />
+  </visual>
+  <asset>
+    <mesh name="base_link" file="base_link.STL" />
+    <mesh name="link_1" file="link_1.STL" />
+    <mesh name="link_2" file="link_2.STL" />
+    <mesh name="link_3" file="link_3.STL" />
+    <mesh name="link_4" file="link_4.STL" />
+    <mesh name="link_5" file="link_5.STL" />
+    <mesh name="link_6" file="link_6.STL" />
+    <mesh name="link_7" file="link_7.STL" />
+    <material name="robot_material" rgba="0.8 0.8 0.9 1" />
+    <material name="joint_material" rgba="0.3 0.3 0.3 1" />
+    <texture name="grid" type="2d" builtin="checker" width="512" height="512" rgb1="0.2 0.3 0.4" rgb2="0.1 0.15 0.2" />
+    <material name="grid_mat" texture="grid" texrepeat="10 10" texuniform="true" />
+  </asset>
+  <worldbody>
+    <geom name="ground" type="plane" size="2 2 0.01" rgba="0.2 0.25 0.3 1" material="grid_mat" />
+    <light directional="true" pos="1 1 3" dir="-1 -1 -2" diffuse="0.8 0.8 0.8" />
+    <light directional="true" pos="-1 1 3" dir="1 -1 -2" diffuse="0.6 0.6 0.6" />
+    <body name="base_link" pos="0 0 0.05">
+      <geom type="mesh" rgba="1 1 1 1" mesh="base_link" />
+      <body name="link_1" pos="0 0 0.2405">
+        <inertial pos="0.000241 -0.013273 -0.00995" quat="0.994748 0.0977096 0.00152589 0.0304335" mass="1.574" diaginertia="0.00248814 0.00235608 0.00141495" />
+        <joint name="joint_1" pos="0 0 0" axis="0 0 1" range="-3.106 3.106" actuatorfrcrange="-60 60" />
+        <geom type="mesh" rgba="1 1 1 1" mesh="link_1" />
+        <body name="link_2" quat="0.707105 -0.707108 0 0">
+          <inertial pos="-0.000357 -0.106789 0.005329" quat="0.42567 0.528808 -0.571708 0.460778" mass="1.217" diaginertia="0.00357183 0.00349364 0.000765446" />
+          <joint name="joint_2" pos="0 0 0" axis="0 0 1" range="-2.2689 2.2689" actuatorfrcrange="-60 60" />
+          <geom type="mesh" rgba="1 1 1 1" mesh="link_2" />
+          <body name="link_3" pos="0 -0.256 0" quat="0.707105 0.707108 0 0">
+            <inertial pos="3e-06 -0.01398 -0.011324" quat="0.999101 0.0421927 0.00270285 0.00294856" mass="1.11" diaginertia="0.0018367 0.00150201 0.00105938" />
+            <joint name="joint_3" pos="0 0 0" axis="0 0 1" range="-3.106 3.106" actuatorfrcrange="-30 30" />
+            <geom type="mesh" rgba="1 1 1 1" mesh="link_3" />
+            <body name="link_4" quat="0.707105 -0.707108 0 0">
+              <inertial pos="-5e-06 -0.084658 0.004747" quat="0.432821 0.552209 -0.561126 0.439168" mass="0.685" diaginertia="0.00131346 0.00128244 0.000315738" />
+              <joint name="joint_4" pos="0 0 0" axis="0 0 1" range="-2.356 2.356" actuatorfrcrange="-30 30" />
+              <geom type="mesh" rgba="1 1 1 1" mesh="link_4" />
+              <body name="link_5" pos="0 -0.21 0" quat="0.707105 0.707108 0 0">
+                <inertial pos="7.8e-05 -0.012937 -0.008781" quat="0.995304 0.096364 0.00225001 0.00888711" mass="0.619" diaginertia="0.000627369 0.000549264 0.000363449" />
+                <joint name="joint_5" pos="0 0 0" axis="0 0 1" range="-3.106 3.106" actuatorfrcrange="-10 10" />
+                <geom type="mesh" rgba="1 1 1 1" mesh="link_5" />
+                <body name="link_6" quat="0.707105 -0.707108 0 0">
+                  <inertial pos="-1.4e-05 -0.078524 0.002819" quat="0.430179 0.5452 -0.565052 0.445442" mass="0.602" diaginertia="0.000792852 0.000780759 0.000261092" />
+                  <joint name="joint_6" pos="0 0 0" axis="0 0 1" range="-2.234 2.234" actuatorfrcrange="-10 10" />
+                  <geom type="mesh" rgba="1 1 1 1" mesh="link_6" />
+                  <body name="link_7" pos="0 -0.144 0" quat="0.707105 0.707108 0 0">
+                    <inertial pos="0.001094 -7.7e-05 -0.010119" quat="0.505029 0.501976 -0.49846 0.494473" mass="0.107" diaginertia="6.54492e-05 4.41192e-05 3.50775e-05" />
+                    <joint name="joint_7" pos="0 0 0" axis="0 0 1" range="-6.28 6.28" actuatorfrcrange="-10 10" />
+                    <geom type="mesh" rgba="1 1 1 1" mesh="link_7" />
+                    <site name="ee_site" pos="0 0 0" size="0.015" rgba="1 0 0 1" type="sphere" />
+                  </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+    <camera name="vr_left_eye" pos="0.5 -0.5 0.8" xyaxes="0.866 0.5 0 -0.25 0.433 0.866" fovy="90" />
+    <camera name="vr_right_eye" pos="0.5 -0.5 0.8" xyaxes="0.866 0.5 0 -0.25 0.433 0.866" fovy="90" />
+    <camera name="tracking" pos="1.5 -1.5 1.2" xyaxes="0.707 0.707 0 -0.408 0.408 0.816" mode="trackcom" />
+  </worldbody>
+  <actuator>
+    <position name="actuator_1" joint="joint_1" kp="100" kv="10" forcerange="-87 87" />
+    <position name="actuator_2" joint="joint_2" kp="100" kv="10" forcerange="-87 87" />
+    <position name="actuator_3" joint="joint_3" kp="100" kv="10" forcerange="-87 87" />
+    <position name="actuator_4" joint="joint_4" kp="80" kv="8" forcerange="-30 30" />
+    <position name="actuator_5" joint="joint_5" kp="80" kv="8" forcerange="-10 10" />
+    <position name="actuator_6" joint="joint_6" kp="60" kv="6" forcerange="-10 10" />
+    <position name="actuator_7" joint="joint_7" kp="60" kv="6" forcerange="-10 10" />
+  </actuator>
+  <keyframe>
+    <key name="home" qpos="0 0 0 0 0 0 0" />
+    <key name="ready" qpos="0 -0.5 0.8 0 0.5 0 0" />
+    <key name="reach" qpos="0 0.3 0.3 0 -0.6 0 0" />
+  </keyframe>
+  <sensor>
+    <jointpos name="joint_1_pos" joint="joint_1" />
+    <jointpos name="joint_2_pos" joint="joint_2" />
+    <jointpos name="joint_3_pos" joint="joint_3" />
+    <jointpos name="joint_4_pos" joint="joint_4" />
+    <jointpos name="joint_5_pos" joint="joint_5" />
+    <jointpos name="joint_6_pos" joint="joint_6" />
+    <jointpos name="joint_7_pos" joint="joint_7" />
+    <framepos name="ee_pos" objtype="site" objname="ee_site" />
+    <framequat name="ee_quat" objtype="site" objname="ee_site" />
+  </sensor>
+</mujoco>

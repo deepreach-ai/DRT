@@ -243,6 +243,11 @@ _web_dir = os.path.join(_repo_dir, "client", "web")
 if os.path.isdir(_web_dir):
     app.mount("/web", StaticFiles(directory=_web_dir, html=True), name="web")
 
+# Mount robots directory for assets (URDF, meshes)
+_robots_dir = os.path.join(_repo_dir, "robots")
+if os.path.isdir(_robots_dir):
+    app.mount("/assets/robots", StaticFiles(directory=_robots_dir), name="robots")
+
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
@@ -368,8 +373,10 @@ async def websocket_endpoint(websocket: WebSocket):
 
     def get_video_state():
         pos, ori = (None, None)
+        joints = None
         if server.backend and server.backend.is_connected():
             pos, ori = server.backend.get_current_pose()
+            joints = server.backend.get_joint_positions()
         if pos is None:
             pos = np.array([0.0, 0.0, 0.0])
         if ori is None:
@@ -377,6 +384,7 @@ async def websocket_endpoint(websocket: WebSocket):
         return {
             "position": [float(pos[0]), float(pos[1]), float(pos[2])],
             "orientation": [float(ori[0]), float(ori[1]), float(ori[2]), float(ori[3])],
+            "joints": joints.tolist() if joints is not None else [],
             "status": server.backend.get_status().get("status") if server.backend else "none",
             "timestamp": time.time(),
         }
@@ -405,7 +413,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 jpg = render_status_frame(960, 540, state)
                 
             _recorder.save_frame(session_id, jpg)
-            await asyncio.sleep(0.05)
+            await asyncio.sleep(0.02) # 50Hz (Increased for lower latency)
 
     state_task = asyncio.create_task(state_loop())
 
@@ -417,7 +425,12 @@ async def websocket_endpoint(websocket: WebSocket):
             # Handle different message types
             if isinstance(msg, dict):
                 msg_type = msg.get("type", "delta")
-                command_dict = msg.get("payload", {})
+                # Handle both nested 'payload' format and flat format
+                if "payload" in msg:
+                    command_dict = msg.get("payload", {})
+                else:
+                    # Exclude metadata keys when treating msg as command_dict
+                    command_dict = {k: v for k, v in msg.items() if k not in ["type"]}
             else:
                 msg_type = "delta"
                 command_dict = msg
@@ -462,7 +475,8 @@ async def login(req: LoginRequest, request: Request):
     if _auth.auth_enabled() and not _auth.validate_login(req.username, req.password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     token = _auth.issue_token(req.username)
-    host = request.headers.get("host")
+    # Handle proxy headers for correct URL generation (e.g. ngrok)
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host")
     scheme = request.headers.get("x-forwarded-proto") or request.url.scheme
     ws_scheme = "wss" if scheme == "https" else "ws"
     ws_url = f"{ws_scheme}://{host}/ws/v1/teleop?token={token}"
@@ -508,6 +522,44 @@ async def video_mjpeg(token: str):
 
     def get_state():
         pos, ori = (None, None)
+        joints = None
+        if server.backend and server.backend.is_connected():
+            pos, ori = server.backend.get_current_pose()
+            joints = server.backend.get_joint_positions()
+        if pos is None:
+            pos = np.array([0.0, 0.0, 0.0])
+        if ori is None:
+            ori = np.array([1.0, 0.0, 0.0, 0.0])
+        return {
+            "position": [float(pos[0]), float(pos[1]), float(pos[2])],
+            "orientation": [float(ori[0]), float(ori[1]), float(ori[2]), float(ori[3])],
+            "joints": joints.tolist() if joints is not None else [],
+            "status": server.backend.get_status().get("status") if server.backend else "none",
+            "timestamp": time.time(),
+        }
+
+    def get_frame():
+        if hasattr(server.backend, "render"):
+            return server.backend.render(width=960, height=540)
+        return None
+
+    return StreamingResponse(
+        mjpeg_stream(get_state_fn=get_state, fps=10, get_frame_fn=get_frame),
+        media_type="multipart/x-mixed-replace; boundary=frame",
+    )
+
+
+@app.get("/api/v1/video/{camera_name}/mjpeg")
+async def video_camera_mjpeg(camera_name: str, token: str):
+    # Allow simple token check or no auth for local demo if needed
+    if _auth.auth_enabled():
+        if not _auth.verify_token(token):
+             raise HTTPException(status_code=401, detail="Unauthorized")
+    
+    server = get_server()
+
+    def get_state():
+        pos, ori = (None, None)
         if server.backend and server.backend.is_connected():
             pos, ori = server.backend.get_current_pose()
         if pos is None:
@@ -523,7 +575,11 @@ async def video_mjpeg(token: str):
 
     def get_frame():
         if hasattr(server.backend, "render"):
-            return server.backend.render(width=960, height=540)
+            try:
+                return server.backend.render(width=960, height=540, camera=camera_name)
+            except TypeError:
+                # Backend render doesn't support camera arg
+                return server.backend.render(width=960, height=540)
         return None
 
     return StreamingResponse(

@@ -1,99 +1,106 @@
-# 🤖 DRT Quick Start Guide
+# 🚀 DRT 快速上手指南（QUICK START）
 
-Welcome to the DRT (Distributed Robot Teleoperation) System! This guide will help you get started with Simulation (MuJoCo), Real Robot Control, and VR.
+欢迎使用 DRT（分布式机器人远程操控）系统！本指南帮助你以最简单的方式启动仿真（MuJoCo）、真实机械臂与 Web/VR 控制。
 
 ---
 
-## 🚀 1. Installation
+## 1. 安装
 
-### Prerequisites
-*   Python 3.10+
-*   Node.js & npm (for Web UI)
-*   **Hardware (Optional):** SO-ARM101, Realman Robot, Quest 3, Webcam/RealSense
+### 环境要求
+- Python 3.10+
+- 可选硬件：SO-ARM101、Realman、Quest 3/3S、Webcam/RealSense
 
-### Setup Environment
+### 安装步骤
 ```bash
-# 1. Clone the repository
-git clone <repo_url>
-cd drt
-
-# 2. Install Python dependencies
+git clone https://github.com/deepreach-ai/DRT.git
+cd DRT
 pip install -r requirements.txt
 ```
 
 ---
 
-## 🎮 2. Running in Simulation (MuJoCo)
+## 2. 启动服务（单一服务器，端口 8000）
+使用集成的 FastAPI 服务器，既提供 Web UI，又提供 API。
 
-Best for testing the UI and network without hardware.
-
-### Start the Server
+### 启动 Mock 后端（无需硬件/仿真）
 ```bash
-# Requires MuJoCo installed (pip install mujoco)
-python server/teleop_server.py --backend mujoco
+python run_server.py --backend mock
 ```
 
-### Start the Web UI
-Open a new terminal:
+### 启动 MuJoCo 仿真（SO-101 示例）
 ```bash
-cd client/web
-# Open index.html in your browser directly, OR serve it:
-python -m http.server 3000
-# Visit: http://localhost:3000
+python run_server.py --backend mujoco \
+  --mujoco-xml robots/so101.xml \
+  --mujoco-ee gripperframe
 ```
-*   **Controls:**
-    *   `W/S`: Forward/Backward (X)
-    *   `A/D`: Left/Right (Y)
-    *   `Q/E`: Up/Down (Z)
-    *   `J/L`: Yaw Rotation
-    *   See [Keyboard Controls](docs/KEYBOARD_CONTROLS.md) for full details.
+
+### 启动 Isaac 后端
+```bash
+python run_server.py --backend isaac
+```
 
 ---
 
-## 🥽 3. Running in VR (Quest 3)
-
-Control the robot using VR controllers with stereoscopic vision.
-
-1.  **Start Server:** `python server/teleop_server.py --backend mujoco` (or real robot)
-2.  **Start Web Server:** `python -m http.server 3000` (in `client/web`)
-3.  **Connect Quest:** Open Browser in Quest and navigate to `http://YOUR_COMPUTER_IP:3000/vr.html`
-4.  **Enter VR:** Click "Enter VR" button.
-
-For detailed VR setup (including USB tethering for low latency), see [VR Setup Guide](docs/VR_SETUP.md).
+## 3. 打开 Web 客户端并登录
+在浏览器访问：
+```
+http://localhost:8000/web/
+```
+登录（默认）：
+- 用户名：operator
+- 密码：operator
+提示：无需填写 Base URL，或设置为 `http://localhost:8000`。
 
 ---
 
-## 🦾 4. Running Real Robot
-
-### SO-ARM101
+## 4. 快速验证 API
 ```bash
-python server/teleop_server.py --backend soarm --robot-port /dev/tty.usbmodem...
+curl http://localhost:8000/api/v1/statistics | python -m json.tool
+```
+输出应包含：
+- backend: mujoco/mock/isaac
+- status: connected
+- 位置/姿态统计信息等
+
+---
+
+## 5. 键盘控制
+- Web UI：支持 XYZ 平移 + Yaw 旋转
+- Python 客户端：支持完整 6-DoF（Pitch/Roll/Yaw + XYZ）
+
+参考文档与命令：
+- 文档：[Keyboard Controls](docs/KEYBOARD_CONTROLS.md)
+- Python 客户端：
+```bash
+python client/keyboard_client.py
 ```
 
-### Realman (Coming Soon)
-Support for Realman RM65/75 is integrated.
+---
+
+## 6. VR（Quest 3/3S）
+- 打开 Web UI 页面后点击 “Enter VR Mode”
+- 如需 HTTPS/SSL 以支持 WebXR，参考 [VR 设置](docs/VR_SETUP.md)
+- 远程访问可配合 ngrok/反向代理进行 HTTPS 暴露，详见 [LOCAL_VALIDATION_GUIDE](docs/LOCAL_VALIDATION_GUIDE.md)
+
+---
+
+## 7. 真实机械臂（SO-ARM101 示例）
 ```bash
-python server/teleop_server.py --backend realman --robot-ip 192.168.1.10
+python run_server.py --backend soarm --soarm-port /dev/ttyUSB0
 ```
-
-For detailed hardware setup, see [Real Robot Setup](docs/SOARM_SETUP.md).
-
----
-
-## 📹 5. Video Streaming
-
-The system supports multiple video sources (Webcam, RealSense, Isaac Sim).
-*   **Local:** Webcams are auto-detected.
-*   **Remote:** MJPEG streams supported.
+更多硬件配置与部署参考：[SOARM_SETUP](docs/SOARM_SETUP.md)、[SOARM_DEPLOYMENT_GUIDE](docs/SOARM_DEPLOYMENT_GUIDE.md)
 
 ---
 
-## 🛠️ Troubleshooting
+## 8. 视频流
+支持多源视频（Webcam、RealSense、Isaac Sim）。Web UI 会显示占位或 MJPEG/RTC 视频。高级配置参考相关文档。
 
-| Issue | Solution |
-| :--- | :--- |
-| **"Missing motors" error** | Check USB connection and power. |
-| **Robot moves sluggishly** | Check `max_velocity` limits. |
-| **VR Not Connecting** | Ensure Quest is on same WiFi or use USB tethering. |
+---
 
-See [docs/](docs/) for more troubleshooting guides.
+## 9. 常见问题（Troubleshooting）
+- 页面 404：访问 `http://localhost:8000/web/`
+- 登录失败：使用 `operator/operator`；Base URL 留空或设为 `http://localhost:8000`
+- WebSocket 失败：确保服务已启动，且 Base URL 正确
+- 远程访问：检查云端安全组端口（默认 8000），参考部署文档
+
+更多问题与进阶指南请见 [docs/](docs/)。

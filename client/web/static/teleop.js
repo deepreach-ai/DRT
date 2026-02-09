@@ -4,9 +4,18 @@ class TeleopClient {
         // Configuration - get server URL from page or default to localhost
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const host = window.location.hostname || 'localhost';
-        const port = window.location.port || '8000';
-        this.wsUrl = `${protocol}//${host}:${port}/ws/v1/teleop`;
-        this.apiUrl = `${window.location.protocol}//${host}:${port}/api/v1`;
+        const port = window.location.port;
+        
+        // Handle port logic: use port if present, otherwise default to 8000 only if localhost
+        // For ngrok (https on 443), port is empty string, so we shouldn't append :8000
+        let portStr = port ? `:${port}` : '';
+        if (!port && host === 'localhost') {
+             portStr = ':8000';
+        }
+        
+        this.wsUrl = `${protocol}//${host}${portStr}/ws/v1/teleop`;
+        this.apiUrl = `${window.location.protocol}//${host}${portStr}/api/v1`;
+        this.token = null;
         
         // WebSocket
         this.ws = null;
@@ -24,7 +33,7 @@ class TeleopClient {
         
         // Command sending
         this.sendInterval = null;
-        this.sendFrequency = 20; // Hz
+        this.sendFrequency = 50; // Hz (Increased for lower latency)
         
         // Statistics
         this.commandCount = 0;
@@ -55,7 +64,14 @@ class TeleopClient {
         this.vrInput = {
             dx: 0, dy: 0, dz: 0,
             droll: 0, dpitch: 0, dyaw: 0,
-            gripper: -1
+            gripper: -1,
+            reference_frame: null // Optional override
+        };
+        
+        // VR Motion Accumulator (for 6-DoF clutch control)
+        this.vrAccumulator = {
+            dx: 0, dy: 0, dz: 0,
+            droll: 0, dpitch: 0, dyaw: 0
         };
         
         this.init();
@@ -118,24 +134,29 @@ class TeleopClient {
     }
     
     setupButtons() {
-        // Connect button
-        this.connectBtn.addEventListener('click', () => {
-            this.connect();
-        });
+        if (this.connectBtn) {
+            this.connectBtn.addEventListener('click', () => {
+                this.connect();
+            });
+        }
         
-        // Disconnect button
-        this.disconnectBtn.addEventListener('click', () => {
-            this.disconnect();
-        });
+        if (this.disconnectBtn) {
+            this.disconnectBtn.addEventListener('click', () => {
+                this.disconnect();
+            });
+        }
         
-        // Mode buttons
-        this.positionModeBtn.addEventListener('click', () => {
-            this.setMode('position');
-        });
+        if (this.positionModeBtn) {
+            this.positionModeBtn.addEventListener('click', () => {
+                this.setMode('position');
+            });
+        }
         
-        this.orientationModeBtn.addEventListener('click', () => {
-            this.setMode('orientation');
-        });
+        if (this.orientationModeBtn) {
+            this.orientationModeBtn.addEventListener('click', () => {
+                this.setMode('orientation');
+            });
+        }
         
         // Virtual joystick buttons
         const joystickButtons = document.querySelectorAll('.joystick-btn');
@@ -180,14 +201,39 @@ class TeleopClient {
         }
     }
     
+    setToken(token) {
+        this.token = token;
+    }
+    
+    setServerUrl(url) {
+        try {
+            // Ensure URL has protocol
+            if (!url.startsWith('http')) {
+                const pageProtocol = window.location.protocol; // 'http:' or 'https:'
+                url = pageProtocol + '//' + url;
+            }
+            const urlObj = new URL(url);
+            const protocol = urlObj.protocol === 'https:' ? 'wss:' : 'ws:';
+            this.wsUrl = `${protocol}//${urlObj.host}/ws/v1/teleop`;
+            this.apiUrl = `${urlObj.protocol}//${urlObj.host}/api/v1`;
+            console.log(`[TeleopClient] Server URL updated: ${this.wsUrl}`);
+        } catch (e) {
+            console.error('Invalid URL provided to setServerUrl:', url);
+        }
+    }
+
     connect() {
         if (this.connected) return;
         
-        console.log('Connecting to WebSocket:', this.wsUrl);
+        let url = this.wsUrl;
+        if (this.token) {
+            url = `${url}?token=${encodeURIComponent(this.token)}`;
+        }
+        console.log('Connecting to WebSocket:', url);
         this.updateConnectionStatus('connecting');
         
         try {
-            this.ws = new WebSocket(this.wsUrl);
+            this.ws = new WebSocket(url);
             
             this.ws.onopen = () => {
                 console.log('WebSocket connected');
@@ -263,6 +309,15 @@ class TeleopClient {
         this.vrInput = { ...this.vrInput, ...input };
     }
 
+    accumulateVRMotion(delta) {
+        this.vrAccumulator.dx += delta.dx || 0;
+        this.vrAccumulator.dy += delta.dy || 0;
+        this.vrAccumulator.dz += delta.dz || 0;
+        this.vrAccumulator.droll += delta.droll || 0;
+        this.vrAccumulator.dpitch += delta.dpitch || 0;
+        this.vrAccumulator.dyaw += delta.dyaw || 0;
+    }
+
     sendCommand() {
         if (!this.connected || !this.ws) return;
         
@@ -270,7 +325,7 @@ class TeleopClient {
         const command = {
             dx: 0, dy: 0, dz: 0,
             droll: 0, dpitch: 0, dyaw: 0,
-            reference_frame: 'end_effector',
+            reference_frame: this.vrInput.reference_frame || 'end_effector',
             max_velocity: 0.5,
             max_angular_velocity: 1.0,
             timestamp: Date.now() / 1000,
@@ -296,13 +351,28 @@ class TeleopClient {
             }
         });
 
-        // Add VR Input
+        // Add VR Input (Rate based)
         command.dx += this.vrInput.dx;
         command.dy += this.vrInput.dy;
         command.dz += this.vrInput.dz;
         command.droll += this.vrInput.droll;
         command.dpitch += this.vrInput.dpitch;
         command.dyaw += this.vrInput.dyaw;
+        
+        // Add VR Motion (Accumulated delta)
+        command.dx += this.vrAccumulator.dx;
+        command.dy += this.vrAccumulator.dy;
+        command.dz += this.vrAccumulator.dz;
+        command.droll += this.vrAccumulator.droll;
+        command.dpitch += this.vrAccumulator.dpitch;
+        command.dyaw += this.vrAccumulator.dyaw;
+
+        // Reset accumulator
+        this.vrAccumulator = {
+            dx: 0, dy: 0, dz: 0,
+            droll: 0, dpitch: 0, dyaw: 0
+        };
+
         if (this.vrInput.gripper >= 0) {
             command.gripper_state = this.vrInput.gripper;
         }
@@ -312,7 +382,9 @@ class TeleopClient {
             this.lastCommandTime = Date.now();
             this.ws.send(JSON.stringify(command));
             this.commandCount++;
-            this.commandCountEl.textContent = this.commandCount;
+            if (this.commandCountEl) {
+                this.commandCountEl.textContent = this.commandCount;
+            }
         } catch (error) {
             console.error('Failed to send command:', error);
         }
@@ -328,7 +400,9 @@ class TeleopClient {
             }
             
             const avgLatency = this.latencies.reduce((a, b) => a + b, 0) / this.latencies.length;
-            this.latencyEl.textContent = `${Math.round(avgLatency)} ms`;
+            if (this.latencyEl) {
+                this.latencyEl.textContent = `${Math.round(avgLatency)} ms`;
+            }
         }
         
         // Update safety status
@@ -350,12 +424,22 @@ class TeleopClient {
         if (data.status === 'error') {
             console.error('Server error:', data.message);
         }
+
+        // Handle robot state update (Broadcast)
+        if (data.type === 'state' && data.robot) {
+            if (this.onStateUpdate) {
+                this.onStateUpdate(data.robot);
+            }
+        }
     }
     
     async activateSafety() {
         try {
             const response = await fetch(`${this.apiUrl}/safety/activate`, {
-                method: 'POST'
+                method: 'POST',
+                headers: {
+                    'ngrok-skip-browser-warning': 'true'
+                }
             });
             
             if (response.ok) {
@@ -382,14 +466,15 @@ class TeleopClient {
         this.activeKeys.clear();
         
         // Update UI
+        const labelEl = document.getElementById('joystickLabel');
         if (mode === 'position') {
-            this.positionModeBtn.classList.add('active');
-            this.orientationModeBtn.classList.remove('active');
-            document.getElementById('joystickLabel').textContent = 'Position Control (X, Y, Z)';
+            if (this.positionModeBtn) this.positionModeBtn.classList.add('active');
+            if (this.orientationModeBtn) this.orientationModeBtn.classList.remove('active');
+            if (labelEl) labelEl.textContent = 'Position Control (X, Y, Z)';
         } else {
-            this.positionModeBtn.classList.remove('active');
-            this.orientationModeBtn.classList.add('active');
-            document.getElementById('joystickLabel').textContent = 'Orientation Control (Roll, Pitch, Yaw)';
+            if (this.positionModeBtn) this.positionModeBtn.classList.remove('active');
+            if (this.orientationModeBtn) this.orientationModeBtn.classList.add('active');
+            if (labelEl) labelEl.textContent = 'Orientation Control (Roll, Pitch, Yaw)';
         }
         
         console.log(`Switched to ${mode.toUpperCase()} mode`);
@@ -399,26 +484,33 @@ class TeleopClient {
         const statusEl = this.connectionStatus;
         
         if (status === 'connected') {
-            statusEl.textContent = 'Connected';
-            statusEl.className = 'badge connected';
-            this.connectBtn.style.display = 'none';
-            this.disconnectBtn.style.display = 'block';
-            this.connectionTimeEl.textContent = new Date().toLocaleTimeString();
+            if (statusEl) {
+                statusEl.textContent = 'Connected';
+                statusEl.className = 'badge connected';
+            }
+            if (this.connectBtn) this.connectBtn.style.display = 'none';
+            if (this.disconnectBtn) this.disconnectBtn.style.display = 'block';
+            if (this.connectionTimeEl) this.connectionTimeEl.textContent = new Date().toLocaleTimeString();
         } else if (status === 'connecting') {
-            statusEl.textContent = 'Connecting...';
-            statusEl.className = 'badge disconnected';
+            if (statusEl) {
+                statusEl.textContent = 'Connecting...';
+                statusEl.className = 'badge disconnected';
+            }
         } else {
-            statusEl.textContent = 'Disconnected';
-            statusEl.className = 'badge disconnected';
-            this.connectBtn.style.display = 'block';
-            this.disconnectBtn.style.display = 'none';
-            this.connectionTimeEl.textContent = '--';
+            if (statusEl) {
+                statusEl.textContent = 'Disconnected';
+                statusEl.className = 'badge disconnected';
+            }
+            if (this.connectBtn) this.connectBtn.style.display = 'block';
+            if (this.disconnectBtn) this.disconnectBtn.style.display = 'none';
+            if (this.connectionTimeEl) this.connectionTimeEl.textContent = '--';
         }
     }
     
     updateSafetyStatus(active) {
         const statusEl = this.safetyStatus;
         
+        if (!statusEl) return;
         if (active) {
             statusEl.textContent = 'Safety Active';
             statusEl.className = 'badge safety-active';
@@ -435,7 +527,9 @@ class TeleopClient {
                 const uptime = Math.floor((Date.now() - this.startTime) / 1000);
                 const minutes = Math.floor(uptime / 60);
                 const seconds = uptime % 60;
-                this.uptimeEl.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                if (this.uptimeEl) {
+                    this.uptimeEl.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                }
             }
         }, 1000);
     }

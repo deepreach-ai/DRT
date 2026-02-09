@@ -62,6 +62,13 @@ class MockRobotBackend(RobotBackend):
             
         with self.update_lock:
             return self.current_position.copy(), self.current_orientation.copy()
+
+    def get_joint_positions(self) -> Optional[np.ndarray]:
+        """Get simulated joint positions"""
+        if not self.is_connected():
+            return None
+        # Return 6 zeros for mock 6-DoF arm
+        return np.zeros(6)
     
     def get_status(self) -> Dict[str, Any]:
         """Get mock backend status"""

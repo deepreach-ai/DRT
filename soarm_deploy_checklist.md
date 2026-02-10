@@ -62,7 +62,7 @@
   ```
 - [ ] 可以SSH连接 / Can SSH connect
   ```bash
-  ssh -i ~/.ssh/teleop-aws.pem ubuntu@YOUR_AWS_IP
+  ssh -i ~/.ssh/teleop-aws.pem ubuntu@44.254.63.252
   ```
 
 ### 服务器配置 / Server Configuration
@@ -83,21 +83,21 @@
 ### 网络测试 / Network Testing
 - [ ] 可以ping通服务器 / Can ping server
   ```bash
-  ping YOUR_AWS_IP
+  ping 44.254.63.252
   ```
 - [ ] API端口可访问 / API port accessible
   ```bash
-  curl http://YOUR_AWS_IP:8000/api/v1/status
+  curl http://44.254.63.252:8000/api/v1/status
   ```
 - [ ] WebSocket连接正常 / WebSocket works
   ```bash
-  wscat -c ws://YOUR_AWS_IP:8000/ws/v1/teleop
+  wscat -c ws://44.254.63.252:8000/ws/v1/teleop
   ```
 
 ### 功能测试 / Functional Testing
 - [ ] Web UI可访问 / Web UI accessible
   ```
-  http://YOUR_AWS_IP:8000
+  http://44.254.63.252:8000
   ```
 - [ ] 可以连接机械臂 / Can connect to robot
 - [ ] 机械臂响应控制命令 / Robot responds to commands
@@ -115,7 +115,7 @@
 - [ ] 从美国可以ping通服务器 / Can ping from USA
 - [ ] 延迟可接受 / Latency acceptable
   ```bash
-  ping -c 100 YOUR_AWS_IP
+  ping -c 100 44.254.63.252
   ```
 
 ### 功能测试 / Functional Testing
@@ -129,7 +129,7 @@
 - [ ] 运行延迟测试 / Run latency test
   ```bash
   python client/latency_test_client.py \
-      --server ws://YOUR_AWS_IP:8000/ws/v1/teleop \
+      --server ws://44.254.63.252:8000/ws/v1/teleop \
       --samples 200
   ```
 - [ ] 记录测试结果 / Record test results
@@ -230,12 +230,12 @@ _________________________________________________________________
 
 ## 🔗 快速链接 / Quick Links
 
-- **服务器地址 / Server URL:** `http://YOUR_AWS_IP:8000`
-- **API文档 / API Docs:** `http://YOUR_AWS_IP:8000/docs`
-- **WebSocket:** `ws://YOUR_AWS_IP:8000/ws/v1/teleop`
+- **服务器地址 / Server URL:** `http://44.254.63.252:8000`
+- **API文档 / API Docs:** `http://44.254.63.252:8000/docs`
+- **WebSocket:** `ws://44.254.63.252:8000/ws/v1/teleop`
 - **SSH命令 / SSH Command:**
   ```bash
-  ssh -i ~/.ssh/teleop-aws.pem ubuntu@YOUR_AWS_IP
+  ssh -i ~/.ssh/teleop-aws.pem ubuntu@44.254.63.252
   ```
 - **日志查看 / View Logs:**
   ```bash

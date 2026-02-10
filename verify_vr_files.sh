@@ -3,7 +3,7 @@ echo "🔍 Verifying VR Files Installation"
 echo "=================================="
 echo ""
 
-cd ~/drt 2>/dev/null || cd /Users/ziguo/drt
+cd ~/drt 2>/dev/null || cd ~/teleop_system
 
 check_file() {
     if [ -f "$1" ]; then

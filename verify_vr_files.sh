@@ -3,7 +3,7 @@ echo "🔍 Verifying VR Files Installation"
 echo "=================================="
 echo ""
 
-cd "$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+cd ~/drt 2>/dev/null || cd /Users/ziguo/drt
 
 check_file() {
     if [ -f "$1" ]; then

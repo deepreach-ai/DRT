@@ -22,13 +22,13 @@
     <material name="joint_material" rgba="0.3 0.3 0.3 1" />
     <texture name="grid" type="2d" builtin="checker" width="512" height="512" rgb1="0.2 0.3 0.4" rgb2="0.1 0.15 0.2" />
     <material name="grid_mat" texture="grid" texrepeat="10 10" texuniform="true" />
-    <mesh name="crt_base_link" file="/Users/ziguo/teleop_system/crt_ctag2f90d_gripper_visualization/meshes/base_link.STL" />
-    <mesh name="crt_Left_1_Link" file="/Users/ziguo/teleop_system/crt_ctag2f90d_gripper_visualization/meshes/Left_1_Link.STL" />
-    <mesh name="crt_Left_Support_Link" file="/Users/ziguo/teleop_system/crt_ctag2f90d_gripper_visualization/meshes/Left_Support_Link.STL" />
-    <mesh name="crt_Left_2_Link" file="/Users/ziguo/teleop_system/crt_ctag2f90d_gripper_visualization/meshes/Left_2_Link.STL" />
-    <mesh name="crt_Right_2_Link" file="/Users/ziguo/teleop_system/crt_ctag2f90d_gripper_visualization/meshes/Right_2_Link.STL" />
-    <mesh name="crt_Right_1_Link" file="/Users/ziguo/teleop_system/crt_ctag2f90d_gripper_visualization/meshes/Right_1_Link.STL" />
-    <mesh name="crt_Right_Support_Link" file="/Users/ziguo/teleop_system/crt_ctag2f90d_gripper_visualization/meshes/Right_Support_Link.STL" />
+    <mesh name="crt_base_link" file="../../../crt_ctag2f90d_gripper_visualization/meshes/base_link.STL" />
+    <mesh name="crt_Left_1_Link" file="../../../crt_ctag2f90d_gripper_visualization/meshes/Left_1_Link.STL" />
+    <mesh name="crt_Left_Support_Link" file="../../../crt_ctag2f90d_gripper_visualization/meshes/Left_Support_Link.STL" />
+    <mesh name="crt_Left_2_Link" file="../../../crt_ctag2f90d_gripper_visualization/meshes/Left_2_Link.STL" />
+    <mesh name="crt_Right_2_Link" file="../../../crt_ctag2f90d_gripper_visualization/meshes/Right_2_Link.STL" />
+    <mesh name="crt_Right_1_Link" file="../../../crt_ctag2f90d_gripper_visualization/meshes/Right_1_Link.STL" />
+    <mesh name="crt_Right_Support_Link" file="../../../crt_ctag2f90d_gripper_visualization/meshes/Right_Support_Link.STL" />
   </asset>
   <worldbody>
     <geom name="ground" type="plane" size="2 2 0.01" rgba="0.2 0.25 0.3 1" material="grid_mat" />

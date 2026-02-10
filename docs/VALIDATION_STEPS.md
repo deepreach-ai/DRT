@@ -9,7 +9,7 @@ This document provides step-by-step validation for running the teleoperation sys
 
 ### Check Python Environment
 ```bash
-cd /Users/ziguo/drt
+cd ~/teleop_system
 
 # Check if virtual environment exists
 ls -la .venv
@@ -59,7 +59,7 @@ MuJoCo version: 3.1.6
 **Purpose:** Confirm the FastAPI server starts without errors
 
 ```bash
-cd /Users/ziguo/drt
+cd ~/teleop_system
 
 # Terminal 1: Start server with Mock backend
 python run_server.py --backend mock --host 0.0.0.0 --port 8000
@@ -99,10 +99,10 @@ curl http://localhost:8000/api/v1/statistics
 **Purpose:** Confirm MuJoCo backend loads the robot model
 
 ```bash
-cd /Users/ziguo/drt
+cd ~/teleop_system
 
 # Set environment variables for MuJoCo
-export TELEOP_MUJOCO_XML="/Users/ziguo/drt/robots/so101_new.xml"
+export TELEOP_MUJOCO_XML="~/teleop_system/robots/so101_new.xml"
 export TELEOP_MUJOCO_EE_SITE="gripperframe"
 export TELEOP_MUJOCO_CAMERA="main"
 
@@ -116,7 +116,7 @@ python run_server.py --backend mujoco \
 ```
 Starting teleoperation server on 0.0.0.0:8000
 Using backend: mujoco
-[MuJoCo] Loading model from: /Users/ziguo/drt/robots/so101_new.xml
+[MuJoCo] Loading model from: ~/teleop_system/robots/so101_new.xml
 INFO:     Started server process [xxxxx]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
@@ -154,7 +154,7 @@ curl http://localhost:8000/api/v1/statistics | python -m json.tool
 **Purpose:** Verify the web interface starts correctly
 
 ```bash
-cd /Users/ziguo/drt
+cd ~/teleop_system
 
 # Terminal 1: Start teleop server (keep running)
 python run_server.py --backend mock
@@ -229,7 +229,7 @@ curl http://localhost:8080/api/v1/statistics
 **Purpose:** Test the Python keyboard controller
 
 ```bash
-cd /Users/ziguo/drt
+cd ~/teleop_system
 
 # Terminal 1: Server should be running
 python run_server.py --backend mock
@@ -403,7 +403,7 @@ After running all tests, verify:
 ### Issue 1: "Module not found: fastapi"
 ```bash
 # Solution: Install dependencies
-cd /Users/ziguo/drt
+cd ~/teleop_system
 source .venv/bin/activate
 pip install -r server/requirements.txt
 ```
@@ -416,7 +416,7 @@ ls -la robots/assets/*.stl
 
 # Try absolute path
 python run_server.py --backend mujoco \
-  --mujoco-xml /Users/ziguo/drt/robots/so101_new.xml
+  --mujoco-xml ~/teleop_system/robots/so101_new.xml
 ```
 
 ### Issue 3: "Address already in use (port 8000)"

@@ -52,7 +52,7 @@ def check_command_exists(cmd):
 def main():
     print_section("TELEOP SYSTEM VALIDATION - NO CHANGES MODE")
     
-    teleop_dir = Path("/Users/ziguo/drt")
+    teleop_dir = Path(__file__).parent.absolute()
     
     if not teleop_dir.exists():
         print_error(f"Teleop directory not found: {teleop_dir}")

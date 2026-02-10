@@ -1,19 +1,18 @@
 #!/bin/bash
-# VR Control Startup Script for REALMAN RM75B in MuJoCo
+# VR Control Startup Script for RM75-B in MuJoCo
 # This script starts the teleoperation server with VR support for Quest 3S
 
 set -e
 
-echo "🤖 Starting REALMAN RM75B VR Teleoperation System"
+echo "🤖 Starting RM75-B VR Teleoperation System"
 echo "=================================================="
 echo ""
 
 # Configuration
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-ROBOT_XML="${SCRIPT_DIR}/robots/rm75b_vr.xml"
+ROBOT_XML="${SCRIPT_DIR}/robots/rm75b_vr_v2.xml"
 EE_SITE="ee_site"
 PORT=8000
-WEB_PORT=8080
 
 # Color codes for terminal output
 GREEN='\033[0;32m'
@@ -37,11 +36,10 @@ else
 fi
 
 echo -e "${BLUE}📋 Configuration:${NC}"
-echo "   Robot Model: REALMAN RM75B (7-DOF)"
+echo "   Robot Model: RM75-B (7-DOF) + New Gripper"
 echo "   XML File: $ROBOT_XML"
 echo "   End Effector: $EE_SITE"
 echo "   Server Port: $PORT"
-echo "   Web UI Port: $WEB_PORT"
 echo "   Local IP: $LOCAL_IP"
 echo ""
 
@@ -75,43 +73,30 @@ echo ""
 echo "On your Meta Quest 3S:"
 echo ""
 echo "1. 📱 Open Browser app in Quest"
-echo "2. 🌐 Navigate to: http://${LOCAL_IP}:${PORT}/web/"
-echo "3. 🔐 Login with:"
-echo "   Username: operator"
-echo "   Password: operator"
+echo "2. 🌐 Navigate to: http://${LOCAL_IP}:${PORT}/web/vr.html?urdf=rm75b_w_gripper"
+echo "3. 🔐 Login if prompted (default: operator/operator)"
 echo "4. 🎮 Click 'Enter VR Mode' button"
 echo ""
-echo "Alternative (USB Tethering):"
-echo "1. Connect Quest to Mac via USB cable"
-echo "2. Run: adb reverse tcp:$PORT tcp:$PORT"
-echo "3. Navigate to: http://localhost:$PORT/web/"
+echo "Alternative (Ngrok - Recommended for Latency/HTTPS):"
+echo "1. Ensure ngrok is running on your Mac: ./scripts/run_ngrok.sh"
+echo "2. Open the https://...ngrok-free.app/web/vr.html?urdf=rm75b_w_gripper URL in Quest"
 echo ""
 echo "=================================================="
 echo -e "${BLUE}📊 Server URLs:${NC}"
 echo "=================================================="
 echo ""
-echo "Web Interface:  http://localhost:$PORT/web/"
-echo "                http://${LOCAL_IP}:$PORT/web/"
-echo ""
-echo "API Endpoint:   http://localhost:$PORT/api/v1/"
-echo "Statistics:     http://localhost:$PORT/api/v1/statistics"
-echo "Video Stream:   http://localhost:$PORT/api/v1/video/mjpeg"
+echo "Web VR Interface: http://${LOCAL_IP}:$PORT/web/vr.html?urdf=rm75b_w_gripper"
+echo "API Endpoint:     http://${LOCAL_IP}:$PORT/api/v1/"
 echo ""
 echo "=================================================="
 echo -e "${GREEN}🎮 CONTROLS${NC}"
 echo "=================================================="
 echo ""
 echo "VR Mode (Quest Controllers):"
-echo "  • Right Controller Position → Robot End Effector"
+echo "  • Right Joystick → Move Arm (X/Y/Z)"
+echo "  • Right Grip (Hold) → Clutch (Direct Hand Tracking)"
 echo "  • Right Trigger → Close Gripper"
-echo "  • B Button → Emergency Stop"
-echo "  • Menu Button → Exit VR"
-echo ""
-echo "Keyboard Mode (2D Interface):"
-echo "  • Arrow Keys → Move X/Y"
-echo "  • Page Up/Down → Move Z"
-echo "  • Q/E → Rotate Yaw"
-echo "  • G → Toggle Gripper"
+echo "  • B Button (Long Press) → Exit VR"
 echo ""
 echo "=================================================="
 

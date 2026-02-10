@@ -988,9 +988,9 @@
       function loadRobotModel() {
           if (!URDFLoader) return;
           
-          // Get URDF from URL parameter or default to RM75-B for this system
+          // Get URDF from URL parameter or default to RM75-B with Gripper for this system
           const urlParams = new URLSearchParams(window.location.search);
-          const urdfName = urlParams.get('urdf') || 'RM75-B';
+          const urdfName = urlParams.get('urdf') || 'rm75b_w_gripper';
           const urdfPath = `/assets/robots/${urdfName}.urdf`;
           
           console.log(`[VR] Loading robot model: ${urdfPath}`);
@@ -999,7 +999,8 @@
           // Setup package resolution for RM75-B
           loader.packages = { 
               'RM75-B': '/assets/robots/realman_75',
-              'so101': '/assets/robots' 
+              'so101': '/assets/robots',
+              'crt_ctag2f90d_gripper_visualization': '/assets/gripper'
           };
           
           loader.load(urdfPath, result => {
@@ -1052,8 +1053,20 @@
           
           // Determine joint names based on the loaded robot
           let jointNames = [];
-          if (state.robot.name === 'RM75-B' || state.robot.name === 'realman_rm75b') {
+          if (state.robot.name.includes('RM75-B') || state.robot.name === 'realman_rm75b') {
+              // Standard 7-DOF arm joints
               jointNames = ['joint_1', 'joint_2', 'joint_3', 'joint_4', 'joint_5', 'joint_6', 'joint_7'];
+              
+              // Add gripper joints if present (for RM75-B_with_Gripper)
+              // Order must match MuJoCo XML joint order
+              jointNames.push(
+                  'Left_1_Joint', 
+                  'Left_Support_Joint', 
+                  'Left_2_Joint', 
+                  'Right_2_Joint', 
+                  'Right_1_Joint', 
+                  'Right_Support_Joint'
+              );
           } else {
               // Default to so101 names
               jointNames = [

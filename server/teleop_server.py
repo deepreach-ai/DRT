@@ -248,6 +248,11 @@ _robots_dir = os.path.join(_repo_dir, "robots")
 if os.path.isdir(_robots_dir):
     app.mount("/assets/robots", StaticFiles(directory=_robots_dir), name="robots")
 
+# Mount gripper directory
+_gripper_dir = os.path.join(_repo_dir, "crt_ctag2f90d_gripper_visualization")
+if os.path.isdir(_gripper_dir):
+    app.mount("/assets/gripper", StaticFiles(directory=_gripper_dir), name="gripper")
+
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,

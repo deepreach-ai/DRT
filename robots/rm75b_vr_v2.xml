@@ -22,6 +22,13 @@
     <material name="joint_material" rgba="0.3 0.3 0.3 1" />
     <texture name="grid" type="2d" builtin="checker" width="512" height="512" rgb1="0.2 0.3 0.4" rgb2="0.1 0.15 0.2" />
     <material name="grid_mat" texture="grid" texrepeat="10 10" texuniform="true" />
+    <mesh name="crt_base_link" file="../../../crt_ctag2f90d_gripper_visualization/meshes/base_link.STL" />
+    <mesh name="crt_Left_1_Link" file="../../../crt_ctag2f90d_gripper_visualization/meshes/Left_1_Link.STL" />
+    <mesh name="crt_Left_Support_Link" file="../../../crt_ctag2f90d_gripper_visualization/meshes/Left_Support_Link.STL" />
+    <mesh name="crt_Left_2_Link" file="../../../crt_ctag2f90d_gripper_visualization/meshes/Left_2_Link.STL" />
+    <mesh name="crt_Right_2_Link" file="../../../crt_ctag2f90d_gripper_visualization/meshes/Right_2_Link.STL" />
+    <mesh name="crt_Right_1_Link" file="../../../crt_ctag2f90d_gripper_visualization/meshes/Right_1_Link.STL" />
+    <mesh name="crt_Right_Support_Link" file="../../../crt_ctag2f90d_gripper_visualization/meshes/Right_Support_Link.STL" />
   </asset>
   <worldbody>
     <geom name="ground" type="plane" size="2 2 0.01" rgba="0.2 0.25 0.3 1" material="grid_mat" />
@@ -57,8 +64,35 @@
                     <inertial pos="0.001094 -7.7e-05 -0.010119" quat="0.505029 0.501976 -0.49846 0.494473" mass="0.107" diaginertia="6.54492e-05 4.41192e-05 3.50775e-05" />
                     <joint name="joint_7" pos="0 0 0" axis="0 0 1" range="-6.28 6.28" actuatorfrcrange="-10 10" />
                     <geom type="mesh" rgba="1 1 1 1" mesh="link_7" />
-                    <site name="ee_site" pos="0 0 0" size="0.015" rgba="1 0 0 1" type="sphere" />
-                  </body>
+        <body name="gripper_base_link" pos="0 0 0">
+            <geom type="mesh" rgba="0.6 0.6 0.6 1" mesh="crt_base_link" />
+            <body name="Left_1_Link" pos="0.030141 0 0.10415" quat="0.707107 0.707107 0 0">
+                <joint name="Left_1_Joint" axis="0 0 -1" limited="true" range="-0.91 0" damping="0.1" />
+                <geom type="mesh" rgba="0.6 0.6 0.6 1" mesh="crt_Left_1_Link" />
+                <body name="Left_Support_Link" pos="0.040359 0.037365 0">
+                    <joint name="Left_Support_Joint" axis="0 0 -1" limited="true" range="-1 1" damping="0.1" />
+                    <geom type="mesh" rgba="0.6 0.6 0.6 1" mesh="crt_Left_Support_Link" contype="0" conaffinity="0" />
+                </body>
+            </body>
+            <body name="Left_2_Link" pos="0.016 0 0.121" quat="0.707107 0.707107 0 0">
+                <joint name="Left_2_Joint" axis="0 0 -1" limited="true" range="-1 1" damping="0.1" />
+                <geom type="mesh" rgba="0.6 0.6 0.6 1" mesh="crt_Left_2_Link" contype="0" conaffinity="0" />
+            </body>
+            <body name="Right_2_Link" pos="-0.016 0 0.121" quat="0 0 0.707107 0.707107">
+                <joint name="Right_2_Joint" axis="0 0 1" limited="true" range="0 0.91" damping="0.1" />
+                <geom type="mesh" rgba="0.6 0.6 0.6 1" mesh="crt_Right_2_Link" contype="0" conaffinity="0" />
+            </body>
+            <body name="Right_1_Link" pos="-0.030141 0 0.10415" quat="0 0 0.707107 0.707107">
+                <joint name="Right_1_Joint" axis="0 0 1" limited="true" range="0 0.91" damping="0.1" />
+                <geom type="mesh" rgba="0.6 0.6 0.6 1" mesh="crt_Right_1_Link" />
+                <body name="Right_Support_Link" pos="0.040359 0.037365 0">
+                    <joint name="Right_Support_Joint" axis="0 0 -1" limited="true" range="-1 1" damping="0.1" />
+                    <geom type="mesh" rgba="0.6 0.6 0.6 1" mesh="crt_Right_Support_Link" contype="0" conaffinity="0" />
+                </body>
+            </body>
+            <site name="ee_site" pos="0 0 0.18" size="0.015" rgba="1 0 0 1" type="sphere" />
+        </body>
+      </body>
                 </body>
               </body>
             </body>
@@ -70,6 +104,12 @@
     <camera name="vr_right_eye" pos="0.5 -0.5 0.8" xyaxes="0.866 0.5 0 -0.25 0.433 0.866" fovy="90" />
     <camera name="tracking" pos="1.5 -1.5 1.2" xyaxes="0.707 0.707 0 -0.408 0.408 0.816" mode="trackcom" />
   </worldbody>
+  <contact>
+    <exclude body1="gripper_base_link" body2="Left_1_Link" />
+    <exclude body1="gripper_base_link" body2="Right_1_Link" />
+    <exclude body1="gripper_base_link" body2="Left_2_Link" />
+    <exclude body1="gripper_base_link" body2="Right_2_Link" />
+  </contact>
   <actuator>
     <position name="actuator_1" joint="joint_1" kp="100" kv="10" forcerange="-87 87" />
     <position name="actuator_2" joint="joint_2" kp="100" kv="10" forcerange="-87 87" />
@@ -78,11 +118,19 @@
     <position name="actuator_5" joint="joint_5" kp="80" kv="8" forcerange="-10 10" />
     <position name="actuator_6" joint="joint_6" kp="60" kv="6" forcerange="-10 10" />
     <position name="actuator_7" joint="joint_7" kp="60" kv="6" forcerange="-10 10" />
+    <position name="gripper_actuator" joint="Left_1_Joint" kp="50" kv="5" forcerange="-10 10" ctrlrange="-0.91 0" />
   </actuator>
+  <equality>
+    <joint joint1="Left_1_Joint" joint2="Left_Support_Joint" polycoef="0 -1 0 0 0" />
+    <joint joint1="Left_1_Joint" joint2="Left_2_Joint" polycoef="0 1 0 0 0" />
+    <joint joint1="Left_1_Joint" joint2="Right_2_Joint" polycoef="0 -1 0 0 0" />
+    <joint joint1="Left_1_Joint" joint2="Right_1_Joint" polycoef="0 -1 0 0 0" />
+    <joint joint1="Left_1_Joint" joint2="Right_Support_Joint" polycoef="0 -1 0 0 0" />
+  </equality>
   <keyframe>
-    <key name="home" qpos="0 0 0 0 0 0 0" />
-    <key name="ready" qpos="0 -0.5 0.8 0 0.5 0 0" />
-    <key name="reach" qpos="0 0.3 0.3 0 -0.6 0 0" />
+    <key name="home" qpos="0 0 0 0 0 0 0 0 0 0 0 0 0" />
+    <key name="ready" qpos="0 -0.5 0.8 0 0.5 0 0 0 0 0 0 0 0" />
+    <key name="reach" qpos="0 0.3 0.3 0 -0.6 0 0 0 0 0 0 0 0" />
   </keyframe>
   <sensor>
     <jointpos name="joint_1_pos" joint="joint_1" />
@@ -92,6 +140,7 @@
     <jointpos name="joint_5_pos" joint="joint_5" />
     <jointpos name="joint_6_pos" joint="joint_6" />
     <jointpos name="joint_7_pos" joint="joint_7" />
+    <jointpos name="gripper_pos" joint="Left_1_Joint" />
     <framepos name="ee_pos" objtype="site" objname="ee_site" />
     <framequat name="ee_quat" objtype="site" objname="ee_site" />
   </sensor>

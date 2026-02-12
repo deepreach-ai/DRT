@@ -385,7 +385,7 @@ The Python client sends small increments:
 
 ```bash
 # 1. Start everything
-cd /Users/ziguo/drt
+cd ~/teleop_system
 python run_server.py --backend mock &  # Start in background
 python client/web_server.py
 
@@ -410,7 +410,7 @@ Hold W + D → Robot moves diagonally
 
 ```bash
 # 1. Start server
-cd /Users/ziguo/drt
+cd ~/teleop_system
 python run_server.py --backend mock
 
 # 2. In new terminal, start client

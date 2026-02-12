@@ -233,15 +233,24 @@ class MujocoRobotBackend(RobotBackend):
         """Set follower gripper state (0.0 to 1.0)"""
         if self._model is None: return
         try:
-            # Map 0-1 to joint range
-            name = "gripper"
-            jid = mujoco.mj_name2id(self._model, mujoco.mjtObj.mjOBJ_JOINT, name)
+            # Try finding 'gripper' (SO-ARM101) or 'Left_1_Joint' (RM75-B with gripper)
+            target_joint = "gripper"
+            range_min, range_max = -0.17, 1.74
+            
+            jid = mujoco.mj_name2id(self._model, mujoco.mjtObj.mjOBJ_JOINT, target_joint)
+            if jid == -1:
+                target_joint = "Left_1_Joint"
+                jid = mujoco.mj_name2id(self._model, mujoco.mjtObj.mjOBJ_JOINT, target_joint)
+                # RM75-B gripper range: -0.91 to 0
+                # 0 is usually open, -0.91 is closed (fingers move inward)
+                # We need to check visual, but let's assume 0 (open) -> 1 (closed) maps to 0 -> -0.91
+                range_min, range_max = 0.0, -0.91
+
             if jid != -1:
                 qpos_addr = self._model.jnt_qposadr[jid]
-                # Range usually -0.17 to 1.74
-                low = -0.17
-                high = 1.74
-                val = low + state * (high - low)
+                # Map 0 (open) -> 1 (closed) to joint limits
+                # Note: 'state' from controller is 0 (open) to 1 (closed) usually
+                val = range_min + state * (range_max - range_min)
                 self._data.qpos[qpos_addr] = val
         except:
             pass
@@ -252,6 +261,19 @@ class MujocoRobotBackend(RobotBackend):
         with self.update_lock:
             pos, quat = self._get_site_pose(self._ee_site_id)
             return pos.copy(), quat.copy()
+
+    def get_joint_positions(self) -> Optional[np.ndarray]:
+        """Get current joint positions (radians)"""
+        if not self.is_connected() or self._model is None or self._data is None:
+            return None
+        
+        with self.update_lock:
+            # Return all joint positions
+            qpos = []
+            for i in range(self._model.njnt):
+                addr = self._model.jnt_qposadr[i]
+                qpos.append(self._data.qpos[addr])
+            return np.array(qpos)
 
     def render(self, width: int = 960, height: int = 540, camera: Optional[str] = None) -> Optional[bytes]:
         """Render a frame from the simulation.

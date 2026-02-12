@@ -216,14 +216,14 @@ EOF
 chmod +x deploy_soarm_aws.sh
 
 # 执行部署 / Execute deployment
-./deploy_soarm_aws.sh YOUR_AWS_IP /dev/ttyUSB0
+./deploy_soarm_aws.sh 44.254.63.252 /dev/ttyUSB0
 ```
 
 #### 选项B：手动部署 / Option B: Manual Deployment
 
 ```bash
 # 1. SSH连接到AWS / SSH to AWS
-ssh -i ~/.ssh/teleop-aws.pem ubuntu@YOUR_AWS_IP
+ssh -i ~/.ssh/teleop-aws.pem ubuntu@44.254.63.252
 
 # 2. 安装依赖 / Install dependencies
 sudo apt-get update
@@ -232,7 +232,7 @@ sudo apt-get install -y python3-pip python3-venv git
 # 3. 克隆或上传代码 / Clone or upload code
 git clone YOUR_REPO teleop_platform
 # OR
-# scp -r ~/Teleop_platform ubuntu@YOUR_AWS_IP:~/
+# scp -r ~/Teleop_platform ubuntu@44.254.63.252:~/
 
 # 4. 进入项目目录 / Enter project directory
 cd ~/teleop_platform
@@ -310,13 +310,13 @@ sudo journalctl -u teleop-soarm -f
 
 ```bash
 # 测试网络延迟 / Test network latency
-ping YOUR_AWS_IP
+ping 44.254.63.252
 
 # 测试端口连通性 / Test port connectivity
-nc -zv YOUR_AWS_IP 8000
+nc -zv 44.254.63.252 8000
 
 # 或使用telnet / Or use telnet
-telnet YOUR_AWS_IP 8000
+telnet 44.254.63.252 8000
 ```
 
 ### 3.2 WebSocket连接测试 / WebSocket Connection Test
@@ -331,14 +331,14 @@ pip install websockets requests
 
 # 运行延迟测试 / Run latency test
 python latency_test_client.py \
-    --server ws://YOUR_AWS_IP:8000/ws/v1/teleop?token=YOUR_TOKEN \
+    --server ws://44.254.63.252:8000/ws/v1/teleop?token=YOUR_TOKEN \
     --samples 200
 ```
 
 **使用Web浏览器 / Using Web browser:**
 
 ```
-http://YOUR_AWS_IP:8000
+http://44.254.63.252:8000
 ```
 
 ### 3.3 VR头显连接测试 / VR Headset Connection Test
@@ -348,7 +348,7 @@ http://YOUR_AWS_IP:8000
 1. 确保Quest 3和电脑在同一网络 / Ensure Quest 3 and PC are on same network
 2. 在Quest浏览器中打开 / Open in Quest browser:
    ```
-   http://YOUR_AWS_IP:8000
+   http://44.254.63.252:8000
    ```
 3. 进入VR模式 / Enter VR mode
 4. 测试控制延迟 / Test control latency
@@ -357,7 +357,7 @@ http://YOUR_AWS_IP:8000
 
 ```bash
 # SSH到AWS服务器 / SSH to AWS server
-ssh -i ~/.ssh/teleop-aws.pem ubuntu@YOUR_AWS_IP
+ssh -i ~/.ssh/teleop-aws.pem ubuntu@44.254.63.252
 
 # 监控CPU和内存使用 / Monitor CPU and memory usage
 top
@@ -461,13 +461,13 @@ python test_soarm_integration.py
 
 ```bash
 # 1. 测试网络延迟 / Test network latency
-ping -c 100 YOUR_AWS_IP
+ping -c 100 44.254.63.252
 
 # 2. 测试带宽 / Test bandwidth
 # 使用iperf3或speedtest-cli
 
 # 3. 检查服务器负载 / Check server load
-ssh -i ~/.ssh/teleop-aws.pem ubuntu@YOUR_AWS_IP 'top -bn1 | head -20'
+ssh -i ~/.ssh/teleop-aws.pem ubuntu@44.254.63.252 'top -bn1 | head -20'
 
 # 4. 优化设置 / Optimize settings
 # - 减少视频分辨率 / Reduce video resolution
@@ -502,7 +502,7 @@ sudo journalctl -u teleop-soarm -f
 
 ```bash
 # SSH到服务器 / SSH to server
-ssh -i ~/.ssh/teleop-aws.pem ubuntu@YOUR_AWS_IP
+ssh -i ~/.ssh/teleop-aws.pem ubuntu@44.254.63.252
 
 # 更新代码 / Update code
 cd ~/teleop_platform

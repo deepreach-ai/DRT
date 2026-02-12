@@ -4,7 +4,7 @@
 
 set -e  # Exit on error
 
-TELEOP_DIR="/Users/ziguo/drt"
+TELEOP_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$TELEOP_DIR"
 
 echo "======================================"

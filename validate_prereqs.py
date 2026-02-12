@@ -36,7 +36,7 @@ def check_warn(message):
     return True
 
 # Change to drt directory
-TELEOP_DIR = Path("/Users/ziguo/drt")
+TELEOP_DIR = Path(__file__).parent.absolute()
 os.chdir(TELEOP_DIR)
 
 print_header("TELEOP SYSTEM PRE-VALIDATION CHECKS")

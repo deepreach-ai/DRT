@@ -305,7 +305,9 @@ class SOARMBackend(RobotBackend):
             print(f"[SOARMBackend] ✓ Connected to SO-ARM")
 
             # 2. Connect to Cameras
-            # self._init_cameras() # Disable camera init to avoid resource conflict/delay
+            enable_cameras = os.getenv("TELEOP_ENABLE_CAMERAS", "true").lower() == "true"
+            if enable_cameras:
+                self._init_cameras()
             
             self.status = BackendStatus.CONNECTED
             self.last_update_time = time.time()

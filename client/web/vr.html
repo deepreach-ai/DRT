@@ -5,15 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>VR Teleoperation - Quest 3S</title>
     
-    <!-- WebXR Polyfill for broader compatibility -->
-    <script src="https://cdn.jsdelivr.net/npm/webxr-polyfill@latest/build/webxr-polyfill.js"></script>
-    
+    <!-- ES Module Shims: Required for reliable Import Maps support in VR browsers -->
+    <script async src="https://ga.jspm.io/npm:es-module-shims@1.8.2/dist/es-module-shims.js"></script>
+
     <!-- Import Map for Three.js and Loaders -->
     <script type="importmap">
     {
         "imports": {
-            "three": "https://unpkg.com/three@0.137.0/build/three.module.js",
-            "urdf-loader": "https://unpkg.com/urdf-loader@0.12.1/dist/URDFLoader.js"
+            "three": "https://esm.sh/three@0.158.0",
+            "urdf-loader": "https://esm.sh/urdf-loader@0.12.6?deps=three@0.158.0"
         }
     }
     </script>
@@ -374,8 +374,11 @@
 
     <!-- Main VR Application Script -->
     <script type="module">
-      // Dynamic imports inside init to prevent module crash
-      let THREE, URDFLoader;
+      import * as THREE from 'three';
+      import URDFLoader from 'urdf-loader';
+
+      // Expose globally for debugging or other scripts
+      window.THREE = THREE;
       
       // ========================================
       // GLOBAL STATE
@@ -418,31 +421,11 @@
       async function init() {
         console.log('[VR] Initializing...');
         
-        // Dynamic Import of 3D Engine
-        try {
-            console.log('[VR] Loading 3D Engine...');
-            const threeModule = await import('three');
-            THREE = threeModule;
-            window.THREE = THREE; // Expose globally
-            
-            const urdfModule = await import('urdf-loader');
-            URDFLoader = urdfModule.default;
-            console.log('[VR] 3D Engine loaded');
-        } catch (e) {
-            console.error('[VR] Failed to load 3D engine:', e);
-            // Continue anyway so connection logic works
-        }
-        
         // Check Secure Context
         if (!window.isSecureContext) {
             console.warn('[VR] Insecure context detected. WebXR requires HTTPS or localhost.');
             updateStatus('xr-support', 'HTTPS Required', 'bad');
             alert('WebXR requires a Secure Context (HTTPS or localhost).\nPlease use the ngrok URL (https://...) or localhost.');
-        }
-
-        // Initialize WebXR Polyfill
-        if (window.WebXRPolyfill) {
-            new WebXRPolyfill();
         }
 
         // Check WebXR support
@@ -988,9 +971,9 @@
       function loadRobotModel() {
           if (!URDFLoader) return;
           
-          // Get URDF from URL parameter or default to RM75-B for this system
+          // Get URDF from URL parameter or default to RM75-B with Gripper for this system
           const urlParams = new URLSearchParams(window.location.search);
-          const urdfName = urlParams.get('urdf') || 'RM75-B';
+          const urdfName = urlParams.get('urdf') || 'rm75b_w_gripper';
           const urdfPath = `/assets/robots/${urdfName}.urdf`;
           
           console.log(`[VR] Loading robot model: ${urdfPath}`);
@@ -999,7 +982,8 @@
           // Setup package resolution for RM75-B
           loader.packages = { 
               'RM75-B': '/assets/robots/realman_75',
-              'so101': '/assets/robots' 
+              'so101': '/assets/robots',
+              'crt_ctag2f90d_gripper_visualization': '/assets/gripper'
           };
           
           loader.load(urdfPath, result => {
@@ -1052,8 +1036,20 @@
           
           // Determine joint names based on the loaded robot
           let jointNames = [];
-          if (state.robot.name === 'RM75-B' || state.robot.name === 'realman_rm75b') {
+          if (state.robot.name.includes('RM75-B') || state.robot.name === 'realman_rm75b') {
+              // Standard 7-DOF arm joints
               jointNames = ['joint_1', 'joint_2', 'joint_3', 'joint_4', 'joint_5', 'joint_6', 'joint_7'];
+              
+              // Add gripper joints if present (for RM75-B_with_Gripper)
+              // Order must match MuJoCo XML joint order
+              jointNames.push(
+                  'Left_1_Joint', 
+                  'Left_Support_Joint', 
+                  'Left_2_Joint', 
+                  'Right_2_Joint', 
+                  'Right_1_Joint', 
+                  'Right_Support_Joint'
+              );
           } else {
               // Default to so101 names
               jointNames = [

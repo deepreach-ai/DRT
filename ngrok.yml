@@ -1,2 +1,3 @@
-version: "2"
-authtoken: 39OJtbyYv6TcyGpLjB42r60bahU_21585F7KogNmFQFg4pKPr
+version: "3"
+agent:
+    authtoken: 39Vx1YaEMhtgEuzVtN13SBoRjNt_7WKDDH7KkRbJHuwD6ejno

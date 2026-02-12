@@ -4,7 +4,7 @@
 
 ### Option 1: Mock Backend (No Robot Simulation)
 ```bash
-cd /Users/ziguo/drt
+cd ~/teleop_system
 python run_server.py --backend mock
 
 # Open browser to: http://localhost:8000/web/
@@ -13,7 +13,7 @@ python run_server.py --backend mock
 
 ### Option 2: MuJoCo Backend (Robot Simulation)
 ```bash
-cd /Users/ziguo/drt
+cd ~/teleop_system
 python run_server.py --backend mujoco \
   --mujoco-xml robots/so101.xml \
   --mujoco-ee gripperframe
@@ -23,7 +23,7 @@ python run_server.py --backend mujoco \
 
 ### Option 3: Isaac Sim Backend
 ```bash
-cd /Users/ziguo/drt
+cd ~/teleop_system
 python run_server.py --backend isaac
 
 # Open browser to: http://localhost:8000/web/

@@ -39,99 +39,144 @@ DeepReach Teleoperation Platform is a universal, cloud-native teleoperation syst
 
 ## ⚡ Quick Start
 
-For detailed installation and usage instructions, please see the [Quick Start Guide](QUICKSTART.md).
+For detailed installation and usage instructions, see the [Quick Start Guide](QUICKSTART.md).
 
-### 1. 安装
+### 1. Install
 ```bash
 git clone https://github.com/deepreach-ai/DRT.git
 cd DRT
 pip install -r requirements.txt
 ```
 
-### 2. 启动服务（单一服务器）
-推荐使用集成的 FastAPI 服务器（端口 8000），同时提供 Web UI 与 API。
+### 2. Start the Unified FastAPI Server
+Runs Web UI and API on a single port.
 ```bash
-# Mock 后端（无需仿真/硬件）
+# Mock backend (no hardware)
 python run_server.py --backend mock
 
-# MuJoCo 仿真（SO-101 示例）
+# MuJoCo simulation (SO-101)
 python run_server.py --backend mujoco \
   --mujoco-xml robots/so101.xml \
   --mujoco-ee gripperframe
 
-# MuJoCo 仿真（RM75B VR 优化版）
+# MuJoCo simulation (RM75B VR-optimized)
 python run_server.py --backend mujoco \
   --mujoco-xml robots/rm75b_vr_v2.xml \
   --mujoco-ee ee_site
 
-# MuJoCo 仿真（SO-ARM101 VR 优化版）
+# MuJoCo simulation (SO-ARM101 VR-optimized)
 python run_server.py --backend mujoco \
   --mujoco-xml robots/so101.xml \
   --mujoco-ee gripperframe
 
-# Isaac 后端
+# Isaac Sim backend
 python run_server.py --backend isaac
 ```
 
-### 3. 打开 Web 客户端
-在浏览器访问：
+### 3. Open the Web Client
+Visit:
 ```
 http://localhost:8000/web/
 ```
-登录（默认）：
-- 用户名：operator
-- 密码：operator
-提示：无需填写 Base URL，或设置为 `http://localhost:8000`。
+Login (default):
+- Username: operator
+- Password: operator
 
-### 4. 快速验证
+### 4. Server Health Check
 ```bash
-# 服务器健康检查
 curl http://localhost:8000/api/v1/statistics | python -m json.tool
 ```
-期望包含：
-- backend: mujoco/mock/isaac
+Expected fields include:
+- backend: mujoco/mock/isaac/soarm/so101_dual
 - status: connected
-- current_position / orientation 等统计信息
+- current_position / orientation statistics
 
-### 5. 键盘控制
-- Web UI：支持 XYZ 平移 + Yaw 旋转（更易用）
-- Python 客户端：支持完整 6-DoF（Pitch/Roll/Yaw + XYZ）
+### 5. Keyboard Control
+- Web UI supports XYZ translation + yaw rotation
+- Python client supports full 6-DoF
 
-参考：
-- 文档：[Keyboard Controls](docs/KEYBOARD_CONTROLS.md)
-- Python 客户端：`python client/keyboard_client.py`
+References:
+- Docs: [Keyboard Controls](docs/KEYBOARD_CONTROLS.md)
+- Python client: `python client/keyboard_client.py`
 
-## 🥽 VR Teleoperation (Meta Quest 3S)
+## 🥽 VR Teleoperation (Meta Quest 3)
 
-To achieve low-latency control with the REALMAN RM75B or SO-ARM101:
+The VR client uses WebXR and sends 50 Hz control deltas over WebSocket.
 
-### 1. Optimize for Latency
-The system is pre-configured for **50Hz control loops**. For the best experience:
-- Use **USB ADB Reverse** for the lowest latency: `adb reverse tcp:8000 tcp:8000`.
-- Or use **ngrok** for remote access: `ngrok http 8000`.
+### Modes
+- Single Arm (SO-ARM101): `?urdf=so101`
+- Dual Arm: `?urdf=so101_dual`
+- RM75B: `?urdf=RM75-B`
 
-### 2. Enter VR Mode
-1.  Open Meta Quest Browser.
-2.  Navigate to the VR interface:
-    - **RM75B**: `https://<ngrok-id>.ngrok-free.app/web/vr.html?urdf=RM75-B`
-    - **SO-ARM101**: `https://<ngrok-id>.ngrok-free.app/web/vr.html?urdf=so101`
-3.  Click **"Enter VR Mode"**.
-4.  **Controls**: 
-    - **Right Joystick**: Rate-based movement (constant speed).
-    - **Grip Button (Hold)**: Clutch mode (direct 6-DOF hand tracking).
-    - **Trigger**: Gripper control.
+### Connect Over Wi‑Fi
+1. Put the Quest 3 and your computer on the same network.
+2. Open the Quest Browser.
+3. Navigate to:
+   - `http://<host-ip>:8000/web/vr.html?urdf=so101`
+4. Login (operator/operator), click “Enter VR Mode”.
 
-### 3. Startup Scripts
-For convenience, you can use the provided startup scripts:
-- **RM75B**: `./start_rm75b_vr.sh`
-- **SO-ARM101**: `./start_so101_vr.sh`
+### Wired USB (ADB Reverse)
+Lowest latency and easy local access:
+```bash
+adb devices                # verify headset connection
+adb reverse tcp:8000 tcp:8000
+```
+Open on the headset:
+```
+http://localhost:8000/web/vr.html?urdf=so101
+```
+
+### HTTPS/WSS (Optional Secure Context)
+Some headset/browser setups prefer HTTPS for WebXR:
+```bash
+./generate_cert.sh
+python run_server.py --backend soarm --soarm-port /dev/tty.usbmodemXXXX \
+  --port 8443 --ssl-key key.pem --ssl-cert cert.pem
+adb reverse tcp:8443 tcp:8443
+```
+Open:
+```
+https://localhost:8443/web/vr.html?urdf=so101
+```
+Accept the self-signed certificate warning.
+
+### Dual-Arm Launch
+```bash
+export TELEOP_BACKEND=so101_dual
+export TELEOP_LEFT_PORT=/dev/tty.usbmodemLEFT
+export TELEOP_RIGHT_PORT=/dev/tty.usbmodemRIGHT
+python server/teleop_server.py --port 8000
+```
+Open:
+```
+http://<host-ip>:8000/web/vr.html?urdf=so101_dual
+```
+
+### Controls
+- Grip (hold): clutch for direct 6‑DoF hand deltas
+- Right joystick: rate-based movement when clutch not held
+- Right trigger: gripper open/close
+- B button: exit VR
+
+### Video Streams
+- Generic MJPEG:
+  - `/api/v1/video/mjpeg?token=...`
+- Per camera MJPEG:
+  - `/api/v1/video/{camera_name}/mjpeg?token=...` where camera_name is `left`, `right`, `depth` if supported.
+Note: login first to receive an auth token used by the video endpoints.
+
+### Startup Scripts
+- RM75B: `./start_rm75b_vr.sh`
+- SO-ARM101 (sim): `./start_so101_vr_sim.sh`
+- SO-ARM101 (real): `./start_so101_vr_real.sh`
+- Dual SO-ARM101: `./start_dual_so101_vr.sh`
 
 ## 📚 Documentation
 
 Detailed guides can be found in the `docs/` directory:
 
-*   **Setup:** [VR Setup](docs/VR_SETUP.md), [Real Robot Setup](docs/SOARM_SETUP.md), [Ngrok (Remote Access)](docs/NGROK_SETUP.md)
-*   **Operation:** [Keyboard Controls](docs/KEYBOARD_CONTROLS.md), [Quest 3 Sync](docs/QUEST3_SYNC.md)
+*   **Setup:** [VR Setup](docs/VR_SETUP.md), [SO-ARM Setup](docs/SOARM_SETUP.md), [Ngrok (Remote Access)](docs/NGROK_SETUP.md)
+*   **Operation:** [Keyboard Controls](docs/KEYBOARD_CONTROLS.md), [Quest 3 Sync Guide](docs/QUEST3_SYNC_GUIDE.md)
 *   **Deployment:** [AWS Deployment](docs/AWS_DEPLOYMENT_GUIDE.md), [Isaac Sim Workflow](docs/ISAAC_SIM_WORKFLOW.md)
 *   **Validation:** [Latency Testing](docs/LATENCY_TEST_GUIDE.md), [Local Validation](docs/LOCAL_VALIDATION_GUIDE.md)
 

@@ -39,7 +39,8 @@ class RobotBackend(ABC):
     def send_target_pose(self, position: np.ndarray, 
                          orientation: np.ndarray,
                          velocity_limit: float = 0.1,
-                         gripper_state: float = -1.0) -> bool:
+                         gripper_state: float = -1.0,
+                         handedness: str = "right") -> bool:
         """
         Send target pose to robot
         
@@ -48,6 +49,7 @@ class RobotBackend(ABC):
             orientation: Target orientation as quaternion [w, x, y, z]
             velocity_limit: Maximum velocity (m/s)
             gripper_state: 0.0 (open) to 1.0 (closed), or -1.0 to ignore
+            handedness: Which arm to control ("left" or "right")
             
         Returns:
             True if command was sent successfully
@@ -118,6 +120,13 @@ class BackendFactory:
             port = kwargs.get('port', '/dev/tty.usbmodem5B3E1187881')
             name = kwargs.get('name', 'so_arm')
             return SOARMBackend(port=port, name=name)
+        
+        elif backend_type.lower() == 'so101_dual' or backend_type.lower() == 'dual_soarm':
+            from backends.dual_soarm_backend import DualSOARMBackend
+            left_port = kwargs.get('left_port', '/dev/tty.usbmodem5B3E1187881')
+            right_port = kwargs.get('right_port', '/dev/tty.usbmodem5B3E1224691')
+            name = kwargs.get('name', 'dual_so_arm')
+            return DualSOARMBackend(left_port=left_port, right_port=right_port, name=name)
         
         elif backend_type.lower() == 'mock_vr' or backend_type.lower() == 'mockvr':
             from backends.mock_vr_backend import MockVRBackend

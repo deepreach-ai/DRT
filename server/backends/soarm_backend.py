@@ -375,7 +375,8 @@ class SOARMBackend(RobotBackend):
     def send_target_pose(self, position: np.ndarray, 
                          orientation: np.ndarray,
                          velocity_limit: float = 0.1,
-                         gripper_state: float = -1.0) -> bool:
+                         gripper_state: float = -1.0,
+                         handedness: str = "right") -> bool:
         """
         Send target pose to SO-ARM using Analytical IK (Degrees)
         """

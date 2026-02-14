@@ -1,0 +1,52 @@
+<?xml version="1.0"?>
+<robot name="so101_dual">
+  <!-- WORLD LINK -->
+  <link name="world"/>
+
+  <!-- LEFT ARM -->
+  <link name="left_base">
+    <visual>
+      <origin xyz="0.00615 -9.9e-06 0.0488" rpy="-3.13 -1.47 -9.4e-05"/>
+      <geometry><mesh filename="assets/base_motor_holder_so101_v1.stl"/></geometry>
+    </visual>
+    <visual>
+      <origin xyz="0.0128 -3.5e-06 0.0166" rpy="-1.57 -0.88 -0.0002"/>
+      <geometry><mesh filename="assets/base_so101_v2.stl"/></geometry>
+    </visual>
+    <visual>
+      <origin xyz="0.0263 -8.9e-09 0.0437" rpy="0 0 0"/>
+      <geometry><mesh filename="assets/sts3215_03a_v1.stl"/></geometry>
+    </visual>
+  </link>
+  <joint name="world_to_left" type="fixed">
+    <parent link="world"/>
+    <child link="left_base"/>
+    <origin xyz="0.0 0.2 0.0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Left Joints -->
+  <link name="left_shoulder">
+    <visual><geometry><mesh filename="assets/sts3215_03a_v1.stl"/></geometry></visual>
+  </link>
+  <joint name="left_shoulder_pan" type="revolute">
+    <parent link="left_base"/><child link="left_shoulder"/>
+    <origin xyz="0.0388 -8.9e-09 0.0624" rpy="3.1415 0 -3.1415"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-1.91" upper="1.91" effort="10" velocity="3"/>
+  </joint>
+  <!-- ... (simplified for now, I'll generate the full one) -->
+
+  <!-- RIGHT ARM -->
+  <link name="right_base">
+    <visual>
+      <origin xyz="0.00615 -9.9e-06 0.0488" rpy="-3.13 -1.47 -9.4e-05"/>
+      <geometry><mesh filename="assets/base_motor_holder_so101_v1.stl"/></geometry>
+    </visual>
+  </link>
+  <joint name="world_to_right" type="fixed">
+    <parent link="world"/>
+    <child link="right_base"/>
+    <origin xyz="0.0 -0.2 0.0" rpy="0 0 0"/>
+  </joint>
+  <!-- ... -->
+</robot>

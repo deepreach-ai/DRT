@@ -20,11 +20,13 @@ def main():
     parser.add_argument("--host", default="0.0.0.0", help="Host to bind to")
     parser.add_argument("--port", type=int, default=8000, help="Port to listen on")
     parser.add_argument("--backend", default="mock",
-                       choices=["mock", "isaac", "mujoco", "soarm", "so101", "mock_vr"], help="Backend type")
+                       choices=["mock", "isaac", "mujoco", "soarm", "so101", "mock_vr", "so101_dual"], help="Backend type")
     parser.add_argument("--mujoco-xml", help="Path to MuJoCo XML file")
     parser.add_argument("--mujoco-ee", help="Name of the end-effector site")
     parser.add_argument("--mujoco-camera", help="MuJoCo camera name (e.g. world_cam)")
     parser.add_argument("--soarm-port", help="USB port for SO-ARM robot (e.g. /dev/ttyUSB0)")
+    parser.add_argument("--left-port", help="USB port for Left SO-ARM robot (dual mode)")
+    parser.add_argument("--right-port", help="USB port for Right SO-ARM robot (dual mode)")
     parser.add_argument("--isaac-host", help="Isaac Sim host address")
     parser.add_argument("--isaac-port", type=int, help="Isaac Sim port")
     parser.add_argument("--ssl-key", help="Path to SSL key file (for HTTPS/WebXR)")
@@ -45,6 +47,10 @@ def main():
     # Set environment variables for SO-ARM backend
     if args.soarm_port:
         os.environ["TELEOP_SOARM_PORT"] = args.soarm_port
+    if args.left_port:
+        os.environ["TELEOP_LEFT_PORT"] = args.left_port
+    if args.right_port:
+        os.environ["TELEOP_RIGHT_PORT"] = args.right_port
 
     # Set environment variables for Isaac backend
     if args.isaac_host:
@@ -57,6 +63,11 @@ def main():
         backend_config = {}
         if args.backend in ['soarm', 'so101'] and args.soarm_port:
             backend_config['port'] = args.soarm_port
+        elif args.backend == 'so101_dual':
+            if args.left_port:
+                backend_config['left_port'] = args.left_port
+            if args.right_port:
+                backend_config['right_port'] = args.right_port
         elif args.backend == 'isaac':
             if args.isaac_host:
                 backend_config['host'] = args.isaac_host

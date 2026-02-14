@@ -11,23 +11,32 @@ from safety_gate import VelocityLimiter
 
 
 class TeleoperationController:
-    """Main controller for teleoperation system"""
+    """Main controller for teleoperation system - supports dual arms"""
     
     def __init__(self, workspace_limits: Optional[WorkspaceLimits] = None,
                  velocity_limiter: Optional[VelocityLimiter] = None):
         """
         Initialize teleoperation controller
-        
-        Args:
-            workspace_limits: Workspace bounding box
-            velocity_limiter: Velocity limiting module
         """
         self.workspace = workspace_limits or WorkspaceLimits()
         self.velocity_limiter = velocity_limiter or VelocityLimiter()
         
-        # Current state
-        self.current_position = np.array([0.0, 0.0, 0.0])  # World frame
-        self.current_orientation = np.array([1.0, 0.0, 0.0, 0.0])  # Quaternion (w, x, y, z)
+        # State for both hands
+        self.poses = {
+            "left": {
+                "position": np.array([-0.2, 0.0, 0.2]), # Initial offset for left arm
+                "orientation": np.array([1.0, 0.0, 0.0, 0.0])
+            },
+            "right": {
+                "position": np.array([0.2, 0.0, 0.2]),  # Initial offset for right arm
+                "orientation": np.array([1.0, 0.0, 0.0, 0.0])
+            }
+        }
+        
+        # Current state (for backward compatibility if needed, though we should use self.poses)
+        self.current_position = self.poses["right"]["position"]
+        self.current_orientation = self.poses["right"]["orientation"]
+        
         self.last_command_time: Optional[float] = None
         
         # Statistics
@@ -43,12 +52,6 @@ class TeleoperationController:
         if current_time is None:
             current_time = time.time()
             
-        # Calculate time delta
-        # If last command was too long ago, we should reset dt to avoid large jumps if we use velocity integration
-        # But here we are just adding delta.
-        
-        # However, if we receive many commands, we process them.
-        
         self.last_command_time = current_time
         self.command_count += 1
         
@@ -57,6 +60,15 @@ class TeleoperationController:
             'velocity_violation': False
         }
         
+        # Get handedness
+        handedness = command.handedness.lower()
+        if handedness not in self.poses:
+            handedness = "right" # Default
+            
+        # Get current state for this hand
+        current_pos = self.poses[handedness]["position"]
+        current_ori = self.poses[handedness]["orientation"]
+        
         # Convert command to numpy arrays
         delta_pos = np.array([command.dx, command.dy, command.dz])
         delta_euler = np.array([command.droll, command.dpitch, command.dyaw])
@@ -64,13 +76,13 @@ class TeleoperationController:
         # Transform delta based on reference frame
         if command.reference_frame == ReferenceFrame.END_EFFECTOR:
             # Transform delta from end-effector frame to world frame
-            delta_pos_world = self._transform_to_world_frame(delta_pos)
+            delta_pos_world = self._transform_to_world_frame(delta_pos, current_ori)
         else:
             # Assume WORLD frame
             delta_pos_world = delta_pos
         
         # Calculate target position
-        target_position = self.current_position + delta_pos_world
+        target_position = current_pos + delta_pos_world
         
         # Apply workspace limits
         if not self.workspace.contains(target_position):
@@ -80,7 +92,7 @@ class TeleoperationController:
         
         # Calculate target orientation
         # Convert current orientation to rotation matrix
-        R_current = quaternions.quat2mat(self.current_orientation)
+        R_current = quaternions.quat2mat(current_ori)
         
         # Create rotation matrix from delta euler angles
         R_delta = euler.euler2mat(delta_euler[0],
@@ -101,43 +113,46 @@ class TeleoperationController:
         # Normalize quaternion
         target_orientation = target_orientation / np.linalg.norm(target_orientation)
         
-        # Update current state
-        self.current_position = target_position.copy()
-        self.current_orientation = target_orientation.copy()
+        # Update state for this hand
+        self.poses[handedness]["position"] = target_position.copy()
+        self.poses[handedness]["orientation"] = target_orientation.copy()
+        
+        # Update legacy state for backward compatibility
+        if handedness == "right":
+            self.current_position = target_position.copy()
+            self.current_orientation = target_orientation.copy()
         
         return target_position, target_orientation, command.gripper_state, violations
     
-    def _transform_to_world_frame(self, delta_pos_ee: np.ndarray) -> np.ndarray:
+    def _transform_to_world_frame(self, delta_pos_ee: np.ndarray, current_orientation: np.ndarray) -> np.ndarray:
         """
         Transform delta position from end-effector frame to world frame
-        
-        Args:
-            delta_pos_ee: Delta position in end-effector frame
-            
-        Returns:
-            Delta position in world frame
         """
         # Convert current orientation to rotation matrix
-        R = quaternions.quat2mat(self.current_orientation)
+        R = quaternions.quat2mat(current_orientation)
         
         # Rotate delta from EE frame to world frame
         delta_pos_world = np.dot(R, delta_pos_ee)
         
         return delta_pos_world
     
-    def set_current_pose(self, position: np.ndarray, orientation: np.ndarray):
+    def set_current_pose(self, position: np.ndarray, orientation: np.ndarray, handedness: str = "right"):
         """
         Set the current pose (e.g., from robot feedback)
-        
-        Args:
-            position: Current position in world frame [x, y, z]
-            orientation: Current orientation as quaternion [w, x, y, z]
         """
-        self.current_position = position.copy()
-        self.current_orientation = orientation.copy()
+        h = handedness.lower()
+        if h not in self.poses:
+            h = "right"
+            
+        self.poses[h]["position"] = position.copy()
+        self.poses[h]["orientation"] = orientation.copy()
         
         # Normalize orientation
-        self.current_orientation = self.current_orientation / np.linalg.norm(self.current_orientation)
+        self.poses[h]["orientation"] = self.poses[h]["orientation"] / np.linalg.norm(self.poses[h]["orientation"])
+        
+        if h == "right":
+            self.current_position = self.poses[h]["position"].copy()
+            self.current_orientation = self.poses[h]["orientation"].copy()
     
     def get_statistics(self) -> Dict[str, Any]:
         """Get controller statistics"""

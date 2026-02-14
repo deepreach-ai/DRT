@@ -197,6 +197,23 @@
       }
 
       .hidden { display: none !important; }
+
+      body.embed .card {
+        max-width: none;
+        width: 100%;
+        padding: 0;
+        border-radius: 0;
+        border: none;
+        background: transparent;
+        box-shadow: none;
+      }
+      body.embed h1,
+      body.embed .subtitle,
+      body.embed .status-grid,
+      body.embed #exit-overlay,
+      body.embed #debug-log {
+        display: none !important;
+      }
       
       /* Video elements (hidden, used as textures) */
       #video-left, #video-right, #video-depth {
@@ -454,9 +471,33 @@
         // Auto-fill server URL based on current page
         // Use origin directly to support ngrok (no port 8000) and localhost (with port) correctly
         $('server-url').value = window.location.origin;
+
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('embed') === '1') {
+            document.body.classList.add('embed');
+        }
+        if (params.get('server')) {
+            $('server-url').value = params.get('server');
+        }
+        if (params.get('username')) {
+            $('username').value = params.get('username');
+        }
+        if (params.get('password')) {
+            $('password').value = params.get('password');
+        }
         
         // Setup Simulate VR button
         $('btn-simulate-vr').addEventListener('click', enterSimulatedVR);
+
+        const tokenParam = params.get('token');
+        const autoConnect = params.get('autoconnect') === '1';
+        if (tokenParam) {
+            setTimeout(() => {
+                connectWithToken($('server-url').value.trim(), tokenParam, params.get('autosim') === '1');
+            }, 0);
+        } else if (autoConnect) {
+            setTimeout(() => connectToServer(), 0);
+        }
 
         console.log('[VR] Initialization complete');
       }
@@ -492,6 +533,53 @@
       // ========================================
       // SERVER CONNECTION
       // ========================================
+
+      function normalizeServerUrl(serverUrl) {
+        if (!serverUrl) return '';
+        let cleanUrl = serverUrl.replace(/\/$/, '');
+        if (!cleanUrl.startsWith('http')) {
+            if (cleanUrl.includes('localhost') || cleanUrl.includes('127.0.0.1')) {
+                cleanUrl = 'http://' + cleanUrl;
+            } else {
+                cleanUrl = 'https://' + cleanUrl;
+            }
+        }
+        return cleanUrl;
+      }
+
+      function finishConnect(cleanUrl, token, autoSim) {
+        state.serverUrl = cleanUrl;
+        state.token = token;
+        if (!window.teleopClient) {
+            window.teleopClient = new TeleopClient();
+        }
+        window.teleopClient.setServerUrl(cleanUrl);
+        window.teleopClient.setToken(token);
+        window.teleopClient.connect();
+
+        initVideoStreams();
+
+        state.connected = true;
+        updateStatus('server-status', 'Connected ✓', 'ok');
+        loginSection.classList.add('hidden');
+        vrSection.classList.remove('hidden');
+
+        if (autoSim) {
+            setTimeout(() => enterSimulatedVR(), 50);
+        }
+      }
+
+      function connectWithToken(serverUrl, token, autoSim) {
+        const cleanUrl = normalizeServerUrl(serverUrl);
+        if (!cleanUrl || !token) return;
+        try {
+            updateStatus('server-status', 'Connecting...', 'warn');
+            finishConnect(cleanUrl, token, autoSim);
+        } catch (err) {
+            console.error('[VR] Token connect error:', err);
+            updateStatus('server-status', 'Failed', 'bad');
+        }
+      }
       
       async function connectToServer() {
         const serverUrl = $('server-url').value.trim();
@@ -503,18 +591,7 @@
           return;
         }
         
-        // Ensure no trailing slash
-        let cleanUrl = serverUrl.replace(/\/$/, '');
-        
-        // Ensure protocol
-        if (!cleanUrl.startsWith('http')) {
-            // Default to https if not specified, unless local
-            if (cleanUrl.includes('localhost') || cleanUrl.includes('127.0.0.1')) {
-                cleanUrl = 'http://' + cleanUrl;
-            } else {
-                cleanUrl = 'https://' + cleanUrl;
-            }
-        }
+        const cleanUrl = normalizeServerUrl(serverUrl);
         
         state.serverUrl = cleanUrl;
         
@@ -547,23 +624,8 @@
               
               console.log('[VR] Login successful, token received');
               
-              if (!window.teleopClient) {
-                window.teleopClient = new TeleopClient();
-              }
-              // Set server URL explicitly
-              window.teleopClient.setServerUrl(cleanUrl);
-              window.teleopClient.setToken(loginData.token);
-              window.teleopClient.connect();
-              
-              // Initialize video streams
-              initVideoStreams();
-              
-              // Update UI
-              state.connected = true;
-              updateStatus('server-status', 'Connected ✓', 'ok');
-              loginSection.classList.add('hidden');
-              vrSection.classList.remove('hidden');
-              
+              const params = new URLSearchParams(window.location.search);
+              finishConnect(cleanUrl, loginData.token, params.get('autosim') === '1');
               console.log('[VR] Connected to server');
           } catch (error) {
               clearTimeout(timeoutId);
@@ -968,123 +1030,87 @@
       }
       
       // Robot Loading
+      let ghostRobot = null;
       function loadRobotModel() {
           if (!URDFLoader) return;
           
-          // Get URDF from URL parameter or default to RM75-B with Gripper for this system
           const urlParams = new URLSearchParams(window.location.search);
-          const urdfName = urlParams.get('urdf') || 'rm75b_w_gripper';
+          const urdfName = urlParams.get('urdf') || 'so101';
           const urdfPath = `/assets/robots/${urdfName}.urdf`;
           
           console.log(`[VR] Loading robot model: ${urdfPath}`);
           const loader = new URDFLoader();
           
-          // Setup package resolution for RM75-B
           loader.packages = { 
               'RM75-B': '/assets/robots/realman_75',
               'so101': '/assets/robots',
               'crt_ctag2f90d_gripper_visualization': '/assets/gripper'
           };
           
+          // 1. Load Main Robot (Actual state)
           loader.load(urdfPath, result => {
               state.robot = result;
-              
-              // Position robot (adjust based on scene)
               state.robot.position.set(0, 0.8, -0.8);
-              
-              // URDF is Z-up. Three.js is Y-up.
               state.robot.rotation.x = -Math.PI / 2;
+              scene.add(state.robot);
               
-              // Add shadows
-              state.robot.traverse(c => {
-                  if (c.isMesh) {
-                      c.castShadow = true;
-                      c.receiveShadow = true;
-                  }
+              // 2. Load Ghost Robot (Target state/Trajectory)
+              loader.load(urdfPath, ghost => {
+                  ghostRobot = ghost;
+                  ghostRobot.position.set(0, 0.8, -0.8);
+                  ghostRobot.rotation.x = -Math.PI / 2;
+                  
+                  // Make semi-transparent
+                  ghostRobot.traverse(c => {
+                      if (c.isMesh) {
+                          c.material = c.material.clone();
+                          c.material.transparent = true;
+                          c.material.opacity = 0.3;
+                          c.material.color.setHex(0x4f8cff); // Accent color for target
+                      }
+                  });
+                  scene.add(ghostRobot);
+                  console.log('[VR] Ghost robot loaded');
               });
               
-              scene.add(state.robot);
-              console.log('[VR] Robot loaded successfully', state.robot);
-              
-              // Add a table for it to stand on
+              // Add a table
               const tableGeom = new THREE.BoxGeometry(1, 0.8, 1);
               const tableMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
               const table = new THREE.Mesh(tableGeom, tableMat);
               table.position.set(0, 0.4, -0.8);
-              table.receiveShadow = true;
               scene.add(table);
-              
-          }, (progress) => {
-              // progress
-          }, (err) => {
-              console.error('[VR] Failed to load robot URDF:', err);
-              // Fallback to so101 if RM75-B fails
-              if (urdfName !== 'so101') {
-                  console.log('[VR] Falling back to so101.urdf');
-                  loader.load('/assets/robots/so101.urdf', res => {
-                      state.robot = res;
-                      state.robot.position.set(0, 0.8, -0.8);
-                      state.robot.rotation.x = -Math.PI / 2;
-                      scene.add(state.robot);
-                  });
-              }
           });
       }
 
-      function updateRobotJoints(joints) {
-          if (!state.robot || !joints) return;
+      function updateRobotJoints(joints, isTarget = false) {
+          const model = isTarget ? ghostRobot : state.robot;
+          if (!model || !joints) return;
           
-          // Determine joint names based on the loaded robot
           let jointNames = [];
-          if (state.robot.name.includes('RM75-B') || state.robot.name === 'realman_rm75b') {
-              // Standard 7-DOF arm joints
-              jointNames = ['joint_1', 'joint_2', 'joint_3', 'joint_4', 'joint_5', 'joint_6', 'joint_7'];
-              
-              // Add gripper joints if present (for RM75-B_with_Gripper)
-              // Order must match MuJoCo XML joint order
-              jointNames.push(
-                  'Left_1_Joint', 
-                  'Left_Support_Joint', 
-                  'Left_2_Joint', 
-                  'Right_2_Joint', 
-                  'Right_1_Joint', 
-                  'Right_Support_Joint'
-              );
+          if (model.name.includes('RM75-B')) {
+              jointNames = ['joint_1', 'joint_2', 'joint_3', 'joint_4', 'joint_5', 'joint_6', 'joint_7', 'Left_1_Joint', 'Left_Support_Joint', 'Left_2_Joint', 'Right_2_Joint', 'Right_1_Joint', 'Right_Support_Joint'];
+          } else if (model.name.includes('dual')) {
+              jointNames = ['left_shoulder_pan', 'left_shoulder_lift', 'left_elbow_flex', 'left_wrist_flex', 'left_wrist_roll', 'left_gripper', 'right_shoulder_pan', 'right_shoulder_lift', 'right_elbow_flex', 'right_wrist_flex', 'right_wrist_roll', 'right_gripper'];
           } else {
-              // Default to so101 names
-              jointNames = [
-                  'shoulder_pan', 
-                  'shoulder_lift', 
-                  'elbow_flex', 
-                  'wrist_flex', 
-                  'wrist_roll', 
-                  'gripper'
-              ];
+              jointNames = ['shoulder_pan', 'shoulder_lift', 'elbow_flex', 'wrist_flex', 'wrist_roll', 'gripper'];
           }
           
-          // Apply to URDF model
           for (let i = 0; i < jointNames.length; i++) {
               if (i >= joints.length) break;
               const name = jointNames[i];
-              const val = joints[i];
-              
-              if (state.robot.joints[name]) {
-                  state.robot.joints[name].setJointValue(val);
-              }
+              if (model.joints[name]) model.joints[name].setJointValue(joints[i]);
           }
       }
 
       // Bind to TeleopClient
-      // Wait for teleopClient to be initialized
       const checkClientInterval = setInterval(() => {
           if (window.teleopClient) {
               clearInterval(checkClientInterval);
               window.teleopClient.onStateUpdate = (robotState) => {
-                  if (robotState.joints) {
-                      updateRobotJoints(robotState.joints);
-                  }
+                  if (robotState.joints) updateRobotJoints(robotState.joints, false);
+                  // Optional: if server sends target joints, update ghost
+                  if (robotState.target_joints) updateRobotJoints(robotState.target_joints, true);
               };
-              console.log('[VR] Bound to TeleopClient state updates');
           }
       }, 500);
 
@@ -1126,72 +1152,50 @@
         
         // Handle Controller Input
         const session = frame.session;
-        let inputSource = null;
-        for (const source of session.inputSources) {
-            if (source.handedness === 'right') {
-                inputSource = source;
-                break;
-            }
-        }
+        const refSpace = renderer.xr.getReferenceSpace();
+        
+        // Initialize state for tracking if not exists
+        if (!state.controllers) state.controllers = { left: { lastPose: null }, right: { lastPose: null } };
 
-        let dx = 0, dy = 0, dz = 0;
-        let droll = 0, dpitch = 0, dyaw = 0;
-        let gripper = -1;
-
-        if (inputSource && inputSource.gamepad && window.teleopClient) {
-            const gp = inputSource.gamepad;
-            const buttons = gp.buttons;
+        for (const inputSource of session.inputSources) {
+            const handedness = inputSource.handedness; // 'left' or 'right'
+            if (handedness !== 'left' && handedness !== 'right') continue;
             
-            // ------------------------------------------------
-            // 1. CLUTCH & 6-DoF POSE TRACKING
-            // ------------------------------------------------
-            // Use Grip button (usually index 1) as Clutch
-            const squeeze = buttons[1];
-            const isClutchPressed = squeeze && squeeze.pressed;
+            const gp = inputSource.gamepad;
+            if (!gp || !window.teleopClient) continue;
+            
+            const buttons = gp.buttons;
+            const axes = gp.axes;
+            
+            let dx = 0, dy = 0, dz = 0;
+            let droll = 0, dpitch = 0, dyaw = 0;
+            let gripper = -1;
+
+            // 1. CLUTCH & 6-DoF
+            const isClutchPressed = buttons[1] && buttons[1].pressed;
 
             if (isClutchPressed) {
-                // Get controller pose in reference space
-                const refSpace = renderer.xr.getReferenceSpace();
                 const pose = frame.getPose(inputSource.gripSpace, refSpace);
-                
                 if (pose) {
-                    const currPos = pose.transform.position; // x, y, z
-                    const currRot = pose.transform.orientation; // x, y, z, w
+                    const currPos = pose.transform.position;
+                    const currRot = pose.transform.orientation;
+                    const lastPose = state.controllers[handedness].lastPose;
                     
-                    if (state.lastControllerPose) {
-                        // Calculate Deltas
-                        const prevPos = state.lastControllerPose.position;
-                        const prevRot = state.lastControllerPose.orientation;
-                        
-                        // --- Position Delta ---
-                        // Delta in VR frame
-                        const dPosVR = new THREE.Vector3().subVectors(currPos, prevPos);
-                        
-                        // Transform to Robot Frame
+                    if (lastPose) {
+                        // Position Delta
+                        const dPosVR = new THREE.Vector3().subVectors(currPos, lastPose.position);
                         dPosVR.applyMatrix4(VR_TO_ROBOT);
-                        
-                        // Apply scaling (optional, 1.0 for direct mapping)
-                        const POS_SCALE = 1.5; 
+                        const POS_SCALE = 0.8; // Reduced from 1.5 to 0.8 for better control
                         dx = dPosVR.x * POS_SCALE;
                         dy = dPosVR.y * POS_SCALE;
                         dz = dPosVR.z * POS_SCALE;
 
-                        // --- Rotation Delta ---
+                        // Rotation Delta
                         const qCurr = new THREE.Quaternion(currRot.x, currRot.y, currRot.z, currRot.w);
-                        const qPrev = new THREE.Quaternion(prevRot.x, prevRot.y, prevRot.z, prevRot.w);
-                        
-                        // Relative rotation: q_diff = q_curr * q_prev^-1
+                        const qPrev = new THREE.Quaternion(lastPose.orientation.x, lastPose.orientation.y, lastPose.orientation.z, lastPose.orientation.w);
                         const qDiff = qCurr.clone().multiply(qPrev.clone().invert());
-                        
-                        // Convert Quaternion delta to Euler delta (approximate for small angles)
-                        // Ideally we should transform the rotation axis
-                        // Transform quaternion to rotation matrix
                         const mDiff = new THREE.Matrix4().makeRotationFromQuaternion(qDiff);
-                        
-                        // Transform basis: M_rob = T * M_vr * T^-1
                         const mDiffRob = mDiff.clone().premultiply(VR_TO_ROBOT).multiply(VR_TO_ROBOT_INV);
-                        
-                        // Extract Euler angles from transformed matrix
                         const euler = new THREE.Euler().setFromRotationMatrix(mDiffRob, 'XYZ');
                         
                         const ROT_SCALE = 1.0;
@@ -1199,97 +1203,50 @@
                         dpitch = euler.y * ROT_SCALE;
                         dyaw = euler.z * ROT_SCALE;
                     }
-
-                    // Update last pose
-                    state.lastControllerPose = {
+                    state.controllers[handedness].lastPose = {
                         position: new THREE.Vector3().copy(currPos),
                         orientation: new THREE.Quaternion(currRot.x, currRot.y, currRot.z, currRot.w)
                     };
                 }
             } else {
-                // Clutch released - reset tracking
-                state.lastControllerPose = null;
+                state.controllers[handedness].lastPose = null;
                 
-                // ------------------------------------------------
-                // 2. JOYSTICK FALLBACK (only if clutch not pressed)
-                // ------------------------------------------------
-                const axes = gp.axes;
+                // 2. JOYSTICK (only if clutch not pressed)
                 const ax_x = axes[2] || 0;
                 const ax_y = axes[3] || 0;
-                
-                // Deadzone
                 const deadzone = 0.1;
                 const speed_scale = 0.02;
 
-                // Joystick -> Robot X/Y (Forward/Left)
-                // Joystick Up (y < -0.1) -> Forward (Robot X+)
                 if (Math.abs(ax_y) > deadzone) dx = -ax_y * speed_scale;
-                // Joystick Left (x < -0.1) -> Left (Robot Y+)
                 if (Math.abs(ax_x) > deadzone) dy = -ax_x * speed_scale;
                 
-                // Buttons -> Z (Up/Down)
-                // A (4) / B (5)
-                if (buttons[5] && buttons[5].pressed) dz = speed_scale; // B -> Up
-                if (buttons[4] && buttons[4].pressed) dz = -speed_scale; // A -> Down
+                // A/B for Right, X/Y for Left
+                if (handedness === 'right') {
+                    if (buttons[5] && buttons[5].pressed) dz = speed_scale; // B -> Up
+                    if (buttons[4] && buttons[4].pressed) dz = -speed_scale; // A -> Down
+                } else {
+                    if (buttons[5] && buttons[5].pressed) dz = speed_scale; // Y -> Up
+                    if (buttons[4] && buttons[4].pressed) dz = -speed_scale; // X -> Down
+                }
             }
             
-            // ------------------------------------------------
-            // 3. COMMON INPUTS (Trigger, etc)
-            // ------------------------------------------------
-            // Trigger -> Gripper
-            if (buttons[0]) gripper = buttons[0].value; // 0..1
+            // 3. COMMON INPUTS
+            if (buttons[0]) gripper = buttons[0].value;
 
-            // ------------------------------------------------
             // 4. SYSTEM CONTROLS (B Button - Exit)
-            // ------------------------------------------------
-            // Usually B button is index 5, but check mapping
-            // B button long press (> 1s) to exit VR
-            if (buttons[5] && buttons[5].pressed) {
-                if (!state.exitTimer) {
-                    state.exitTimer = Date.now();
-                } else if (Date.now() - state.exitTimer > 1000) {
-                    // Long press detected
-                    exitVR();
-                    state.exitTimer = null;
-                }
-            } else {
+            if (handedness === 'right' && buttons[5] && buttons[5].pressed) {
+                if (!state.exitTimer) state.exitTimer = Date.now();
+                else if (Date.now() - state.exitTimer > 1000) { exitVR(); state.exitTimer = null; }
+            } else if (handedness === 'right') {
                 state.exitTimer = null;
             }
 
-            // Update Teleop Client
-            // For Rate inputs (Joystick), we use updateVRInput (persistent)
-            // For Motion inputs (Clutch), we use accumulateVRMotion (transient)
-            
+            // Update Teleop Client with handedness
             if (isClutchPressed) {
-                // Send accumulated motion
-                window.teleopClient.accumulateVRMotion({
-                    dx: dx,
-                    dy: dy,
-                    dz: dz,
-                    droll: droll,
-                    dpitch: dpitch,
-                    dyaw: dyaw
-                });
-                
-                // Clear rate inputs (so we don't double move if joystick is also touched)
-                window.teleopClient.updateVRInput({
-                    dx: 0, dy: 0, dz: 0, 
-                    droll: 0, dpitch: 0, dyaw: 0,
-                    gripper: gripper,
-                    reference_frame: 'base'
-                });
+                window.teleopClient.accumulateVRMotion({ dx, dy, dz, droll, dpitch, dyaw }, handedness);
+                window.teleopClient.updateVRInput({ dx: 0, dy: 0, dz: 0, droll: 0, dpitch: 0, dyaw: 0, gripper, reference_frame: 'base' }, handedness);
             } else {
-                // Send rate inputs (Joystick)
-                window.teleopClient.updateVRInput({
-                    dx: dx,
-                    dy: dy,
-                    dz: dz,
-                    droll: droll,
-                    dpitch: dpitch,
-                    dyaw: dyaw,
-                    gripper: gripper,
-                    reference_frame: 'end_effector' // Joystick usually in EE frame or Camera frame
-                });
+                window.teleopClient.updateVRInput({ dx, dy, dz, droll, dpitch, dyaw, gripper, reference_frame: 'end_effector' }, handedness);
             }
         }
         

@@ -29,6 +29,7 @@ class DeltaCommand(BaseModel):
     max_angular_velocity: float = 0.5  # rad/s
     timestamp: float = 0.0
     client_id: str = "default"
+    handedness: str = "right"  # "left" or "right"
 
 
 class JointCommand(BaseModel):

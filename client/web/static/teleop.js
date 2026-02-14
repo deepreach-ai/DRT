@@ -60,18 +60,16 @@ class TeleopClient {
             'o': { axis: 'droll', value: 1 },    // Roll right
         };
         
-        // VR Input
+        // VR Input (Supports dual hands)
         this.vrInput = {
-            dx: 0, dy: 0, dz: 0,
-            droll: 0, dpitch: 0, dyaw: 0,
-            gripper: -1,
-            reference_frame: null // Optional override
+            left: { dx: 0, dy: 0, dz: 0, droll: 0, dpitch: 0, dyaw: 0, gripper: -1, reference_frame: null },
+            right: { dx: 0, dy: 0, dz: 0, droll: 0, dpitch: 0, dyaw: 0, gripper: -1, reference_frame: null }
         };
         
         // VR Motion Accumulator (for 6-DoF clutch control)
         this.vrAccumulator = {
-            dx: 0, dy: 0, dz: 0,
-            droll: 0, dpitch: 0, dyaw: 0
+            left: { dx: 0, dy: 0, dz: 0, droll: 0, dpitch: 0, dyaw: 0 },
+            right: { dx: 0, dy: 0, dz: 0, droll: 0, dpitch: 0, dyaw: 0 }
         };
         
         this.init();
@@ -305,88 +303,110 @@ class TeleopClient {
         }
     }
     
-    updateVRInput(input) {
-        this.vrInput = { ...this.vrInput, ...input };
+    updateVRInput(input, handedness = "right") {
+        const h = handedness.toLowerCase();
+        if (this.vrInput[h]) {
+            this.vrInput[h] = { ...this.vrInput[h], ...input };
+        }
     }
 
-    accumulateVRMotion(delta) {
-        this.vrAccumulator.dx += delta.dx || 0;
-        this.vrAccumulator.dy += delta.dy || 0;
-        this.vrAccumulator.dz += delta.dz || 0;
-        this.vrAccumulator.droll += delta.droll || 0;
-        this.vrAccumulator.dpitch += delta.dpitch || 0;
-        this.vrAccumulator.dyaw += delta.dyaw || 0;
+    accumulateVRMotion(delta, handedness = "right") {
+        const h = handedness.toLowerCase();
+        if (this.vrAccumulator[h]) {
+            this.vrAccumulator[h].dx += delta.dx || 0;
+            this.vrAccumulator[h].dy += delta.dy || 0;
+            this.vrAccumulator[h].dz += delta.dz || 0;
+            this.vrAccumulator[h].droll += delta.droll || 0;
+            this.vrAccumulator[h].dpitch += delta.dpitch || 0;
+            this.vrAccumulator[h].dyaw += delta.dyaw || 0;
+        }
     }
 
     sendCommand() {
         if (!this.connected || !this.ws) return;
         
-        // Build command from active keys
-        const command = {
-            dx: 0, dy: 0, dz: 0,
-            droll: 0, dpitch: 0, dyaw: 0,
-            reference_frame: this.vrInput.reference_frame || 'end_effector',
-            max_velocity: 0.5,
-            max_angular_velocity: 1.0,
-            timestamp: Date.now() / 1000,
-            client_id: 'web_client'
-        };
-        
-        // Apply active keys based on control mode
-        this.activeKeys.forEach(key => {
-            const mapping = this.keyMappings[key];
-            if (!mapping) return;
+        // Send commands for both hands
+        ["left", "right"].forEach(handedness => {
+            const vrIn = this.vrInput[handedness];
+            const vrAcc = this.vrAccumulator[handedness];
+
+            // Build command
+            const command = {
+                dx: 0, dy: 0, dz: 0,
+                droll: 0, dpitch: 0, dyaw: 0,
+                reference_frame: vrIn.reference_frame || 'end_effector',
+                max_velocity: 0.5,
+                max_angular_velocity: 1.0,
+                timestamp: Date.now() / 1000,
+                client_id: 'web_client',
+                handedness: handedness
+            };
             
-            const axis = mapping.axis;
-            const value = mapping.value;
+            // Only apply keyboard keys to the primary hand (right) for simplicity
+            if (handedness === "right") {
+                this.activeKeys.forEach(key => {
+                    const mapping = this.keyMappings[key];
+                    if (!mapping) return;
+                    
+                    const axis = mapping.axis;
+                    const value = mapping.value;
+                    
+                    const isPosition = ['dx', 'dy', 'dz'].includes(axis);
+                    const isOrientation = ['droll', 'dpitch', 'dyaw'].includes(axis);
+                    
+                    if (this.controlMode === 'position' && isPosition) {
+                        command[axis] += value * this.positionIncrement;
+                    } else if (this.controlMode === 'orientation' && isOrientation) {
+                        command[axis] += value * this.orientationIncrement;
+                    }
+                });
+            }
+
+            // Add VR Input (Rate based)
+            command.dx += vrIn.dx;
+            command.dy += vrIn.dy;
+            command.dz += vrIn.dz;
+            command.droll += vrIn.droll;
+            command.dpitch += vrIn.dpitch;
+            command.dyaw += vrIn.dyaw;
             
-            // Check if this axis is for position or orientation
-            const isPosition = ['dx', 'dy', 'dz'].includes(axis);
-            const isOrientation = ['droll', 'dpitch', 'dyaw'].includes(axis);
+            // Add VR Motion (Accumulated delta)
+            command.dx += vrAcc.dx;
+            command.dy += vrAcc.dy;
+            command.dz += vrAcc.dz;
+            command.droll += vrAcc.droll;
+            command.dpitch += vrAcc.dpitch;
+            command.dyaw += vrAcc.dyaw;
+
+            // Reset accumulator for this hand
+            this.vrAccumulator[handedness] = {
+                dx: 0, dy: 0, dz: 0,
+                droll: 0, dpitch: 0, dyaw: 0
+            };
+
+            if (vrIn.gripper >= 0) {
+                command.gripper_state = vrIn.gripper;
+            }
             
-            if (this.controlMode === 'position' && isPosition) {
-                command[axis] += value * this.positionIncrement;
-            } else if (this.controlMode === 'orientation' && isOrientation) {
-                command[axis] += value * this.orientationIncrement;
+            // Only send if there's significant movement or it's the primary hand heartbeat
+            const hasMotion = Math.abs(command.dx) > 0.0001 || Math.abs(command.dy) > 0.0001 || 
+                              Math.abs(command.dz) > 0.0001 || Math.abs(command.droll) > 0.0001 ||
+                              Math.abs(command.dpitch) > 0.0001 || Math.abs(command.dyaw) > 0.0001 ||
+                              command.gripper_state !== undefined;
+
+            if (hasMotion || handedness === "right") {
+                try {
+                    this.lastCommandTime = Date.now();
+                    this.ws.send(JSON.stringify(command));
+                    this.commandCount++;
+                } catch (error) {
+                    console.error(`Failed to send ${handedness} command:`, error);
+                }
             }
         });
 
-        // Add VR Input (Rate based)
-        command.dx += this.vrInput.dx;
-        command.dy += this.vrInput.dy;
-        command.dz += this.vrInput.dz;
-        command.droll += this.vrInput.droll;
-        command.dpitch += this.vrInput.dpitch;
-        command.dyaw += this.vrInput.dyaw;
-        
-        // Add VR Motion (Accumulated delta)
-        command.dx += this.vrAccumulator.dx;
-        command.dy += this.vrAccumulator.dy;
-        command.dz += this.vrAccumulator.dz;
-        command.droll += this.vrAccumulator.droll;
-        command.dpitch += this.vrAccumulator.dpitch;
-        command.dyaw += this.vrAccumulator.dyaw;
-
-        // Reset accumulator
-        this.vrAccumulator = {
-            dx: 0, dy: 0, dz: 0,
-            droll: 0, dpitch: 0, dyaw: 0
-        };
-
-        if (this.vrInput.gripper >= 0) {
-            command.gripper_state = this.vrInput.gripper;
-        }
-        
-        // Send command (even if zero - acts as heartbeat)
-        try {
-            this.lastCommandTime = Date.now();
-            this.ws.send(JSON.stringify(command));
-            this.commandCount++;
-            if (this.commandCountEl) {
-                this.commandCountEl.textContent = this.commandCount;
-            }
-        } catch (error) {
-            console.error('Failed to send command:', error);
+        if (this.commandCountEl) {
+            this.commandCountEl.textContent = this.commandCount;
         }
     }
     

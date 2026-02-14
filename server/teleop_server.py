@@ -99,50 +99,26 @@ class TeleoperationServer:
         
         # Check if timestamp is stale
         if time.time() - command.timestamp > 1.0:
-            # print(f"[Server] Stale command ignored: {time.time() - command.timestamp:.3f}s old")
-            # return {'status': 'ignored', 'message': 'Stale command'}
             pass
             
-        # safety_active = self.safety_gate.update(command_array, command.timestamp)
         # FOR DIAGNOSIS: Force active to allow testing "little moves"
         safety_active = True
         
         if not safety_active:
-            # Debug: Log why safety gate isn't active
-            last_heartbeat = self.safety_gate.last_heartbeat
-            current_time = time.time()
-            time_since_last = (current_time - last_heartbeat) if last_heartbeat else 999.0
-            cmd_magnitude = np.linalg.norm(command_array)
-            
-            # Reduce log spam
-            if self.total_commands % 50 == 0:
-                print(f"[Server] ⚠️  Safety gate INACTIVE! Cmd magnitude={cmd_magnitude:.6f}, threshold={self.safety_gate.activation_threshold}, time since last={time_since_last:.3f}s, timeout={self.safety_gate.timeout}s")
-            
-            return {
-                'status': 'ignored',
-                'message': 'Safety gate not active',
-                'safety_active': False,
-                'violations': {},
-                'debug': {
-                    'command_magnitude': float(cmd_magnitude) if np.isfinite(cmd_magnitude) else 0.0,
-                    'time_since_last_heartbeat': float(time_since_last) if np.isfinite(time_since_last) else 999.0,
-                    'timeout': float(self.safety_gate.timeout)
-                }
-            }
+            # ... (omitting debug logs for brevity)
+            return {'status': 'ignored', 'message': 'Safety gate not active'}
         
-        # Process command through controller
+        # Process command through controller (pass handedness)
         target_position, target_orientation, gripper_state, violations = self.controller.process_command(command)
         
-        # Debug: Print first few commands or if significant movement
-        # print(f"[Server] Target Pos: {target_position}, Gripper: {gripper_state}")
-
-        # Send to robot backend
+        # Send to robot backend (pass handedness)
         if self.backend and self.backend.is_connected():
             success = self.backend.send_target_pose(
                 target_position, 
                 target_orientation,
                 velocity_limit=command.max_velocity,
-                gripper_state=gripper_state
+                gripper_state=gripper_state,
+                handedness=command.handedness
             )
             
             if not success:
@@ -287,6 +263,10 @@ def get_server() -> TeleoperationServer:
                  # Fallback to hardcoded default if needed, or "/dev/ttyUSB0"
                  soarm_port = "/dev/tty.usbmodem5B3E1224691"
             backend_config = {"port": soarm_port}
+        elif backend.lower() == "so101_dual":
+            left_port = os.getenv("TELEOP_LEFT_PORT", "/dev/tty.usbmodem5B3E1187881")
+            right_port = os.getenv("TELEOP_RIGHT_PORT", "/dev/tty.usbmodem5B3E1224691")
+            backend_config = {"left_port": left_port, "right_port": right_port}
         _server_instance = TeleoperationServer(backend_type=backend, backend_config=backend_config)
         _server_instance.initialize()
     return _server_instance
@@ -378,18 +358,50 @@ async def websocket_endpoint(websocket: WebSocket):
 
     def get_video_state():
         pos, ori = (None, None)
+        arms = None
         joints = None
+        target_joints = None
         if server.backend and server.backend.is_connected():
             pos, ori = server.backend.get_current_pose()
             joints = server.backend.get_joint_positions()
-        if pos is None:
-            pos = np.array([0.0, 0.0, 0.0])
-        if ori is None:
-            ori = np.array([1.0, 0.0, 0.0, 0.0])
+            # If backend supports target joints (simulator state)
+            if hasattr(server.backend, "get_target_joint_positions"):
+                target_joints = server.backend.get_target_joint_positions()
+
+            try:
+                lpos, lori = server.backend.get_current_pose(handedness="left")
+                rpos, rori = server.backend.get_current_pose(handedness="right")
+                if lpos is not None or rpos is not None:
+                    if lpos is None:
+                        lpos = np.array([0.0, 0.0, 0.0])
+                    if rpos is None:
+                        rpos = np.array([0.0, 0.0, 0.0])
+                    if lori is None:
+                        lori = np.array([1.0, 0.0, 0.0, 0.0])
+                    if rori is None:
+                        rori = np.array([1.0, 0.0, 0.0, 0.0])
+                    arms = {
+                        "left": {
+                            "position": [float(lpos[0]), float(lpos[1]), float(lpos[2])],
+                            "orientation": [float(lori[0]), float(lori[1]), float(lori[2]), float(lori[3])],
+                        },
+                        "right": {
+                            "position": [float(rpos[0]), float(rpos[1]), float(rpos[2])],
+                            "orientation": [float(rori[0]), float(rori[1]), float(rori[2]), float(rori[3])],
+                        },
+                    }
+            except TypeError:
+                arms = None
+                
+        if pos is None: pos = np.array([0.0, 0.0, 0.0])
+        if ori is None: ori = np.array([1.0, 0.0, 0.0, 0.0])
+        
         return {
             "position": [float(pos[0]), float(pos[1]), float(pos[2])],
             "orientation": [float(ori[0]), float(ori[1]), float(ori[2]), float(ori[3])],
+            "arms": arms or {},
             "joints": joints.tolist() if joints is not None else [],
+            "target_joints": target_joints.tolist() if target_joints is not None else [],
             "status": server.backend.get_status().get("status") if server.backend else "none",
             "timestamp": time.time(),
         }

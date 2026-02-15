@@ -28,3 +28,7 @@ test_camera_frames/
 
 # Empty dirs
 librealsense/
+
+# Keys
+*.pem
+*.cert

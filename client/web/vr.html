@@ -547,7 +547,7 @@
         return cleanUrl;
       }
 
-      function finishConnect(cleanUrl, token, autoSim) {
+      function finishConnect(cleanUrl, token, autoSim, videoEnabled = true) {
         state.serverUrl = cleanUrl;
         state.token = token;
         if (!window.teleopClient) {
@@ -557,7 +557,15 @@
         window.teleopClient.setToken(token);
         window.teleopClient.connect();
 
-        initVideoStreams();
+        if (videoEnabled) {
+          initVideoStreams();
+        } else {
+          console.log('[VR] Video disabled by server, skipping stream init');
+          state.videoStreams.left = false;
+          state.videoStreams.right = false;
+          state.videoStreams.depth = false;
+          updateStatus('video-status', 'Disabled', 'warn');
+        }
 
         state.connected = true;
         updateStatus('server-status', 'Connected ✓', 'ok');
@@ -625,7 +633,8 @@
               console.log('[VR] Login successful, token received');
               
               const params = new URLSearchParams(window.location.search);
-              finishConnect(cleanUrl, loginData.token, params.get('autosim') === '1');
+              const videoEnabled = !!loginData.video_enabled;
+              finishConnect(cleanUrl, loginData.token, params.get('autosim') === '1', videoEnabled);
               console.log('[VR] Connected to server');
           } catch (error) {
               clearTimeout(timeoutId);
@@ -1209,25 +1218,11 @@
                     };
                 }
             } else {
+                // Clutch 未按下：不允许任何位姿或夹爪动作
                 state.controllers[handedness].lastPose = null;
-                
-                // 2. JOYSTICK (only if clutch not pressed)
-                const ax_x = axes[2] || 0;
-                const ax_y = axes[3] || 0;
-                const deadzone = 0.1;
-                const speed_scale = 0.02;
-
-                if (Math.abs(ax_y) > deadzone) dx = -ax_y * speed_scale;
-                if (Math.abs(ax_x) > deadzone) dy = -ax_x * speed_scale;
-                
-                // A/B for Right, X/Y for Left
-                if (handedness === 'right') {
-                    if (buttons[5] && buttons[5].pressed) dz = speed_scale; // B -> Up
-                    if (buttons[4] && buttons[4].pressed) dz = -speed_scale; // A -> Down
-                } else {
-                    if (buttons[5] && buttons[5].pressed) dz = speed_scale; // Y -> Up
-                    if (buttons[4] && buttons[4].pressed) dz = -speed_scale; // X -> Down
-                }
+                dx = 0; dy = 0; dz = 0;
+                droll = 0; dpitch = 0; dyaw = 0;
+                gripper = -1;
             }
             
             // 3. COMMON INPUTS
@@ -1246,7 +1241,8 @@
                 window.teleopClient.accumulateVRMotion({ dx, dy, dz, droll, dpitch, dyaw }, handedness);
                 window.teleopClient.updateVRInput({ dx: 0, dy: 0, dz: 0, droll: 0, dpitch: 0, dyaw: 0, gripper, reference_frame: 'base' }, handedness);
             } else {
-                window.teleopClient.updateVRInput({ dx, dy, dz, droll, dpitch, dyaw, gripper, reference_frame: 'end_effector' }, handedness);
+                // 未按下 Clutch：只发送心跳，不包含运动或夹爪动作
+                window.teleopClient.updateVRInput({ dx: 0, dy: 0, dz: 0, droll: 0, dpitch: 0, dyaw: 0, gripper: -1, reference_frame: 'end_effector' }, handedness);
             }
         }
         

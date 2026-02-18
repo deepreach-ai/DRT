@@ -26,6 +26,7 @@ fi
 
 echo -e "${GREEN}1. Starting Teleop Server (Port 8000)...${NC}"
 # Start server in background
+export TELEOP_DISABLE_VIDEO=1
 python3 run_server.py --host 0.0.0.0 --backend isaac > server.log 2>&1 &
 SERVER_PID=$!
 echo "   Server PID: $SERVER_PID"
@@ -73,7 +74,8 @@ $ISAAC_PYTHON isaac_sim_client.py \
     --ee_frame "$EE_FRAME" \
     --host localhost \
     --headless \
-    --enable-livestream
+    --enable-livestream \
+    --disable-video-ingest
 
 # Cleanup on exit
 kill $SERVER_PID

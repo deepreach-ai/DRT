@@ -14,6 +14,7 @@ parser.add_argument("--robot_usd", type=str, default="Franka/franka.usd", help="
 parser.add_argument("--ee_frame", type=str, default="panda_hand", help="End-effector frame name")
 parser.add_argument("--headless", action="store_true", help="Run in headless mode")
 parser.add_argument("--enable-livestream", action="store_true", default=True, help="Enable WebRTC livestream")
+parser.add_argument("--disable-video-ingest", action="store_true", default=False, help="Do not POST camera frames to teleop server")
 args, unknown = parser.parse_known_args()
 
 # 2. Start SimulationApp with proper livestream config
@@ -283,7 +284,7 @@ class IsaacSimTCPClient:
         
         while self.running:
             # Capture video frame (10Hz)
-            if self.running and time.time() - last_frame_time > 0.1:
+            if (not args.disable_video_ingest) and self.running and time.time() - last_frame_time > 0.1:
                 try:
                     data = self.rgb_annotator.get_data()
                     if data is not None:

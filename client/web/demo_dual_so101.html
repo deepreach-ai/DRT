@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -129,14 +129,14 @@
     <div class="topbar">
       <div class="row">
         <div class="title">SO-ARM101D VR Demo</div>
-        <div id="connPill" class="pill warn">未连接</div>
+        <div id="connPill" class="pill warn">Not Connected</div>
       </div>
       <div class="row">
-        <input id="baseUrl" placeholder="Server Base URL（可空）" />
-        <input id="username" value="operator" placeholder="用户名" />
-        <input id="password" type="password" value="operator" placeholder="密码" />
-        <button id="loginBtn" class="primary">连接</button>
-        <button id="disconnectBtn" class="danger" disabled>断开</button>
+        <input id="baseUrl" placeholder="Server Base URL (optional)" />
+        <input id="username" value="operator" placeholder="Username" />
+        <input id="password" type="password" value="operator" placeholder="Password" />
+        <button id="loginBtn" class="primary">Connect</button>
+        <button id="disconnectBtn" class="danger" disabled>Disconnect</button>
       </div>
     </div>
 
@@ -144,7 +144,7 @@
       <div class="panes">
         <div class="card">
           <div class="cardHeader">
-            <div>左：VR 视图（Simulated View）</div>
+            <div>Left: VR View (Simulated)</div>
             <div class="pill mono" id="vrPill">/web/vr.html</div>
           </div>
           <div class="cardBody">
@@ -154,7 +154,7 @@
 
         <div class="card">
           <div class="cardHeader">
-            <div>右：真机视频（MJPEG）</div>
+            <div>Right: Live Video (MJPEG)</div>
             <div class="pill mono" id="videoPill">/api/v1/video/mjpeg</div>
           </div>
           <div class="cardBody">
@@ -165,7 +165,7 @@
 
       <div class="card">
         <div class="cardHeader">
-          <div>下：双臂末端轨迹（state.robot.arms）</div>
+          <div>Bottom: Dual-arm End-Effector Trajectory (state.robot.arms)</div>
           <div class="pill mono" id="tsPill">ts: -</div>
         </div>
         <div class="cardBody">
@@ -197,7 +197,7 @@
       }
 
       async function login() {
-        setConn("连接中…", "warn")
+        setConn("Connecting…", "warn")
         const res = await fetch(`${base()}/api/v1/auth/login`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -208,7 +208,7 @@
         })
         if (!res.ok) {
           const t = await res.text()
-          setConn("登录失败", "bad")
+          setConn("Login Failed", "bad")
           throw new Error(t)
         }
         const data = await res.json()
@@ -223,7 +223,7 @@
 
         connectWs(data.ws_url)
         $("disconnectBtn").disabled = false
-        setConn("已连接", "ok")
+        setConn("Connected", "ok")
       }
 
       function connectWs(wsUrl) {
@@ -235,10 +235,10 @@
         state.ws = ws
         ws.onopen = () => {}
         ws.onclose = () => {
-          setConn("已断开", "bad")
+          setConn("Disconnected", "bad")
         }
         ws.onerror = () => {
-          setConn("WS错误", "bad")
+          setConn("WS Error", "bad")
         }
         ws.onmessage = (ev) => {
           let msg
@@ -287,7 +287,7 @@
 
         ctx.fillStyle = "rgba(230,240,255,0.9)"
         ctx.font = "12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New"
-        ctx.fillText("红=Left arm  蓝=Right arm   (X-Y投影)", 14, 18)
+        ctx.fillText("Red=Left arm  Blue=Right arm   (X-Y projection)", 14, 18)
 
         drawDot(ctx, lastOf(state.trajLeft), ox, oy, scale, "rgba(255,210,90,1)")
         drawDot(ctx, lastOf(state.trajRight), ox, oy, scale, "rgba(110,255,170,1)")
@@ -321,7 +321,7 @@
         return arr && arr.length ? arr[arr.length - 1] : null
       }
 
-      $("loginBtn").addEventListener("click", () => login().catch((e) => alert(`连接失败: ${e.message || e}`)))
+      $("loginBtn").addEventListener("click", () => login().catch((e) => alert(`Connection failed: ${e.message || e}`)))
       $("disconnectBtn").addEventListener("click", () => {
         try { state.ws && state.ws.close() } catch (_) {}
         state.ws = null
@@ -332,12 +332,11 @@
         state.trajLeft = []
         state.trajRight = []
         drawTraj()
-        setConn("未连接", "warn")
+        setConn("Not Connected", "warn")
       })
 
-      setConn("未连接", "warn")
+      setConn("Not Connected", "warn")
       drawTraj()
     </script>
   </body>
 </html>
-

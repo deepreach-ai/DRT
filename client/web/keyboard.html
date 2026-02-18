@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Keyboard Control</title>
+    <style>
+      :root { color-scheme: dark; --bg:#0b1220; --surface:#111a2e; --border:#22304f; --text:#e6eef9; --accent:#4f8cff; }
+      * { box-sizing: border-box; margin:0; padding:0; }
+      body { font-family: ui-sans-serif, system-ui, -apple-system; background: var(--bg); color: var(--text); }
+      .card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 24px; max-width: 600px; margin: 40px auto; }
+      h1 { font-size: 24px; margin-bottom: 12px; }
+      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+      input { width: 100%; padding: 12px; background: rgba(0,0,0,0.25); color: var(--text); border: 1px solid var(--border); border-radius: 10px; outline: none; font-size: 14px; }
+      button { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--border); background: rgba(79, 140, 255, 0.2); color: var(--text); cursor: pointer; font-size: 14px; font-weight: 600; }
+      .row { display: flex; gap: 12px; margin-top: 12px; }
+      .row > * { flex: 1; }
+      .badge { display:inline-block; padding:4px 8px; border-radius:999px; font-size:12px; border:1px solid var(--border); }
+      .connected { color:#a6f4c5; border-color:rgba(110,255,170,0.3); background:rgba(110,255,170,0.1); }
+      .disconnected { color:#ffb4b4; border-color:rgba(255,77,79,0.3); background:rgba(255,77,79,0.1); }
+      .safety-active { color:#a6f4c5; border-color:rgba(110,255,170,0.3); background:rgba(110,255,170,0.1); }
+      .safety-inactive { color:#ffd29b; border-color:rgba(255,208,120,0.3); background:rgba(255,208,120,0.1); }
+      .small { font-size:12px; opacity:0.75; }
+      .kbd { display:inline-block; padding:4px 8px; border:1px solid var(--border); border-radius:6px; margin:2px; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Keyboard Control</h1>
+      <div class="grid">
+        <div>
+          <div class="small">Server</div>
+          <input id="server-url" type="text" placeholder="http://127.0.0.1:8001" />
+        </div>
+        <div>
+          <div class="small">Connection Status</div>
+          <div id="connectionStatus" class="badge disconnected">Disconnected</div>
+        </div>
+        <div>
+          <div class="small">Username</div>
+          <input id="username" type="text" value="operator" />
+        </div>
+        <div>
+          <div class="small">Safety</div>
+          <div id="safetyStatus" class="badge safety-inactive">Safety Inactive</div>
+        </div>
+        <div>
+          <div class="small">Password</div>
+          <input id="password" type="password" value="operator" />
+        </div>
+        <div>
+          <div class="small">Command Count</div>
+          <div id="commandCount" class="badge">0</div>
+        </div>
+        <div>
+          <button id="btn-login">Login</button>
+        </div>
+        <div class="row">
+          <button id="connectBtn">Connect</button>
+          <button id="disconnectBtn" style="display:none;">Disconnect</button>
+        </div>
+      </div>
+      <div style="margin-top:16px;">
+        <div class="small">Mode</div>
+        <div class="row">
+          <button id="positionModeBtn">Position Mode</button>
+          <button id="orientationModeBtn">Orientation Mode</button>
+        </div>
+      </div>
+      <div style="margin-top:16px;">
+        <div class="small">Keymap</div>
+        <div>
+          <span class="kbd">W/S</span> Z up/down
+          <span class="kbd">A/D</span> X left/right
+          <span class="kbd">Q/E</span> Y forward/back
+        </div>
+        <div style="margin-top:6px;">
+          <span class="kbd">I/K</span> Pitch
+          <span class="kbd">J/L</span> Yaw
+          <span class="kbd">U/O</span> Roll
+        </div>
+        <div style="margin-top:6px;">
+          <span class="kbd">M</span> Toggle mode
+          <span class="kbd">R</span> Reset
+          <span class="kbd">1</span> Activate safety
+        </div>
+      </div>
+    </div>
+    <script src="static/teleop.js"></script>
+    <script>
+      function normalizeServerUrl(u) {
+        if (!u) return '';
+        let s = u.replace(/\/$/, '');
+        if (!s.startsWith('http')) {
+          if (s.includes('localhost') || s.includes('127.0.0.1')) s = 'http://' + s;
+          else s = 'https://' + s;
+        }
+        return s;
+      }
+      document.addEventListener('DOMContentLoaded', () => {
+        const urlEl = document.getElementById('server-url');
+        const userEl = document.getElementById('username');
+        const passEl = document.getElementById('password');
+        const loginBtn = document.getElementById('btn-login');
+        urlEl.value = window.location.origin;
+        window.teleopClient = new TeleopClient();
+        loginBtn.addEventListener('click', async () => {
+          const cleanUrl = normalizeServerUrl(urlEl.value.trim());
+          try {
+            const res = await fetch(cleanUrl + '/api/v1/auth/login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
+              body: JSON.stringify({ username: userEl.value.trim(), password: passEl.value.trim() })
+            });
+            if (!res.ok) return;
+            const data = await res.json();
+            window.teleopClient.setServerUrl(cleanUrl);
+            window.teleopClient.setToken(data.token);
+          } catch (e) {}
+        });
+      });
+    </script>
+  </body>
+</html>

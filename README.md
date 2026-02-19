@@ -56,17 +56,17 @@ python run_server.py --backend mock
 
 # MuJoCo simulation (SO-101)
 python run_server.py --backend mujoco \
-  --mujoco-xml robots/so101.xml \
+  --mujoco-xml robots/so101/so101.xml \
   --mujoco-ee gripperframe
 
 # MuJoCo simulation (RM75B VR-optimized)
 python run_server.py --backend mujoco \
-  --mujoco-xml robots/rm75b_vr_v2.xml \
+  --mujoco-xml robots/rm75b/rm75b_vr_v2.xml \
   --mujoco-ee ee_site
 
 # MuJoCo simulation (SO-ARM101 VR-optimized)
 python run_server.py --backend mujoco \
-  --mujoco-xml robots/so101.xml \
+  --mujoco-xml robots/so101/so101.xml \
   --mujoco-ee gripperframe
 
 # Isaac Sim backend

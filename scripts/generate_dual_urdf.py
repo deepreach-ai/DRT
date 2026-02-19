@@ -55,7 +55,7 @@ def generate_dual_urdf(input_file, output_file):
         f.write(ET.tostring(new_robot))
 
 if __name__ == "__main__":
-    input_urdf = "robots/so101.urdf"
-    output_urdf = "robots/so101_dual.urdf"
+    input_urdf = "robots/so101/so101.urdf"
+    output_urdf = "robots/so101/so101_dual.urdf"
     generate_dual_urdf(input_urdf, output_urdf)
     print(f"Generated {output_urdf}")

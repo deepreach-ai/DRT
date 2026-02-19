@@ -105,7 +105,7 @@ required_files = [
     "server/backends/mujoco_backend.py",
     "client/web_server.py",
     "client/keyboard_client.py",
-    "robots/so101.xml",
+    "robots/so101/so101.xml",
 ]
 
 for file_path in required_files:
@@ -126,7 +126,7 @@ if assets_dir.exists():
     else:
         check_warn(f"Only {len(stl_files)} STL files found (expected 13)")
 else:
-    check_fail("robots/assets/ directory not found")
+    check_fail("robots/so101/assets/ directory not found")
 
 # Check 6: Port Availability
 print_header("5. Port Availability")

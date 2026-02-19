@@ -24,7 +24,7 @@ def test_model_loading():
     """Test if RM75B model loads correctly"""
     print("\n🔍 Testing RM75B model loading...")
     
-    model_path = "robots/rm75b_vr_v2.xml"
+    model_path = "robots/rm75b/rm75b_vr_v2.xml"
     if not os.path.exists(model_path):
         print(f"   ❌ Model file not found: {model_path}")
         return False
@@ -59,7 +59,7 @@ def test_end_effector_site():
     
     try:
         import mujoco
-        model = mujoco.MjModel.from_xml_path("robots/rm75b_vr_v2.xml")
+        model = mujoco.MjModel.from_xml_path("robots/rm75b/rm75b_vr_v2.xml")
         
         ee_site = "ee_site"
         site_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SITE, ee_site)
@@ -85,7 +85,7 @@ def test_ik_solver():
     
     try:
         import mujoco
-        model = mujoco.MjModel.from_xml_path("robots/rm75b_vr_v2.xml")
+        model = mujoco.MjModel.from_xml_path("robots/rm75b/rm75b_vr_v2.xml")
         data = mujoco.MjData(model)
         
         # Reset to home position
@@ -122,7 +122,7 @@ def test_cameras():
     
     try:
         import mujoco
-        model = mujoco.MjModel.from_xml_path("robots/rm75b_vr_v2.xml")
+        model = mujoco.MjModel.from_xml_path("robots/rm75b/rm75b_vr_v2.xml")
         
         expected_cameras = ["vr_left_eye", "vr_right_eye", "tracking"]
         found_cameras = []
@@ -225,7 +225,7 @@ def main():
         print("\n🎉 All tests passed! Ready to start VR control.")
         print("\n📝 Next steps:")
         print("   1. Start server: python run_server.py --backend mujoco \\")
-        print("                       --mujoco-xml robots/rm75b_vr_v2.xml \\")
+        print("                       --mujoco-xml robots/rm75b/rm75b_vr_v2.xml \\")
         print("                       --mujoco-ee ee_site")
         print("   2. Connect Quest 3S to http://YOUR_IP:8000/web/")
         print("   3. Enter VR mode and start controlling!")

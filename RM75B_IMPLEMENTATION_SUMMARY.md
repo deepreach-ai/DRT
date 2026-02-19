@@ -21,7 +21,7 @@ RM75B Model (7-DOF + Gripper)
 ## 📁 Files Created
 
 ### 1. MuJoCo Robot Model
-**File**: `robots/rm75b_vr.xml`
+**File**: `robots/rm75b/rm75b_vr.xml`
 - 7-DOF arm configuration with accurate kinematics
 - Gripper with 2 sliding fingers
 - VR-optimized cameras (stereo + tracking)
@@ -154,7 +154,7 @@ python test_rm75b_setup.py
 ```bash
 python run_server.py \
     --backend mujoco \
-    --mujoco-xml robots/rm75b_vr.xml \
+    --mujoco-xml robots/rm75b/rm75b_vr.xml \
     --mujoco-ee ee_site
 ```
 
@@ -166,7 +166,7 @@ python run_server.py \
 
 ### Pre-VR Tests
 - [ ] `test_rm75b_setup.py` passes
-- [ ] MuJoCo viewer shows robot: `python -m mujoco.viewer robots/rm75b_vr.xml`
+- [ ] MuJoCo viewer shows robot: `python -m mujoco.viewer robots/rm75b/rm75b_vr.xml`
 - [ ] Keyboard control works: `python client/keyboard_client.py`
 - [ ] Server API responds: `curl localhost:8000/api/v1/statistics`
 
@@ -216,7 +216,7 @@ This setup integrates seamlessly with your existing DRT system:
 - ✅ `run_server.py` - Unified server launcher
 
 **Adds new components**:
-- ➕ `robots/rm75b_vr.xml` - Robot model
+- ➕ `robots/rm75b/rm75b_vr.xml` - Robot model
 - ➕ `test_rm75b_setup.py` - Verification
 - ➕ Documentation files
 
@@ -266,7 +266,7 @@ python test_rm75b_setup.py
 # Start VR
 python run_server.py \
     --backend mujoco \
-    --mujoco-xml robots/rm75b_vr.xml \
+    --mujoco-xml robots/rm75b/rm75b_vr.xml \
     --mujoco-ee ee_site
 ```
 

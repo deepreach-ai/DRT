@@ -43,6 +43,7 @@ class TeleoperationServer:
         self.controller = TeleoperationController()
         self.backend = None
         self.connected_clients: List[str] = []
+        self.video_enabled = True
         
         # Statistics
         self.start_time = time.time()
@@ -269,6 +270,8 @@ def get_server() -> TeleoperationServer:
             backend_config = {"left_port": left_port, "right_port": right_port}
         _server_instance = TeleoperationServer(backend_type=backend, backend_config=backend_config)
         _server_instance.initialize()
+        disable_video_env = os.getenv("TELEOP_DISABLE_VIDEO", "").lower()
+        _server_instance.video_enabled = not (disable_video_env in ["1", "true", "yes"])
     return _server_instance
 
 
@@ -497,7 +500,10 @@ async def login(req: LoginRequest, request: Request):
     scheme = request.headers.get("x-forwarded-proto") or request.url.scheme
     ws_scheme = "wss" if scheme == "https" else "ws"
     ws_url = f"{ws_scheme}://{host}/ws/v1/teleop?token={token}"
-    return {"token": token, "ws_url": ws_url, "video_url": f"/api/v1/video/mjpeg?token={token}"}
+    server = get_server()
+    video_enabled = bool(server.video_enabled)
+    video_url = f"/api/v1/video/mjpeg?token={token}" if video_enabled else ""
+    return {"token": token, "ws_url": ws_url, "video_url": video_url, "video_enabled": video_enabled}
 
 
 @app.post("/api/v1/auth/logout")
@@ -530,12 +536,13 @@ async def ingest_video(request: Request):
 
 @app.get("/api/v1/video/mjpeg")
 async def video_mjpeg(token: str):
+    server = get_server()
+    if not server.video_enabled:
+        raise HTTPException(status_code=404, detail="Video streaming disabled")
     # Allow simple token check or no auth for local demo if needed
     if _auth.auth_enabled():
         if not _auth.verify_token(token):
              raise HTTPException(status_code=401, detail="Unauthorized")
-    
-    server = get_server()
 
     def get_state():
         pos, ori = (None, None)
@@ -568,12 +575,13 @@ async def video_mjpeg(token: str):
 
 @app.get("/api/v1/video/{camera_name}/mjpeg")
 async def video_camera_mjpeg(camera_name: str, token: str):
+    server = get_server()
+    if not server.video_enabled:
+        raise HTTPException(status_code=404, detail="Video streaming disabled")
     # Allow simple token check or no auth for local demo if needed
     if _auth.auth_enabled():
         if not _auth.verify_token(token):
              raise HTTPException(status_code=401, detail="Unauthorized")
-    
-    server = get_server()
 
     def get_state():
         pos, ori = (None, None)
@@ -670,12 +678,17 @@ def run_server(host: str = "0.0.0.0", port: int = 8000, backend_type: str = "moc
 
 if __name__ == "__main__":
     import argparse
+    import os
     parser = argparse.ArgumentParser(description="Teleoperation Server")
     parser.add_argument("--host", type=str, default="0.0.0.0", help="Host address")
     parser.add_argument("--port", type=int, default=8000, help="Port number")
     parser.add_argument("--backend", type=str, default="mock", help="Backend type (mock, isaac, or mujoco)")
     parser.add_argument("--robot-port", type=str, default=None, help="Robot serial port (e.g. /dev/ttyUSB0)")
+    parser.add_argument("--ssl-keyfile", type=str, default=None, help="Path to TLS private key file")
+    parser.add_argument("--ssl-certfile", type=str, default=None, help="Path to TLS certificate file")
     
     args = parser.parse_args()
     
-    run_server(host=args.host, port=args.port, backend_type=args.backend, robot_port=args.robot_port)
+    ssl_keyfile = os.getenv("TELEOP_SSL_KEYFILE", args.ssl_keyfile)
+    ssl_certfile = os.getenv("TELEOP_SSL_CERTFILE", args.ssl_certfile)
+    run_server(host=args.host, port=args.port, backend_type=args.backend, robot_port=args.robot_port, ssl_keyfile=ssl_keyfile, ssl_certfile=ssl_certfile)

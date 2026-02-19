@@ -15,7 +15,7 @@ python run_server.py --backend mock
 ```bash
 cd ~/teleop_system
 python run_server.py --backend mujoco \
-  --mujoco-xml robots/so101.xml \
+  --mujoco-xml robots/so101/so101.xml \
   --mujoco-ee gripperframe
 
 # Open browser to: http://localhost:8000/web/
@@ -55,7 +55,7 @@ python client/web_server.py  # ← This doesn't have auth endpoints
 **✅ CORRECT:**
 ```bash
 # Just run teleop server - it has everything!
-python run_server.py --backend mujoco --mujoco-xml robots/so101.xml --mujoco-ee gripperframe
+python run_server.py --backend mujoco --mujoco-xml robots/so101/so101.xml --mujoco-ee gripperframe
 ```
 
 ---
@@ -172,7 +172,7 @@ open http://localhost:8000/web/
 
 **Correct workflow:**
 ```bash
-python run_server.py --backend mujoco --mujoco-xml robots/so101.xml --mujoco-ee gripperframe
+python run_server.py --backend mujoco --mujoco-xml robots/so101/so101.xml --mujoco-ee gripperframe
 open http://localhost:8000/web/
 # Login → Control robot with keyboard!
 ```

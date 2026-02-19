@@ -39,7 +39,7 @@ cd ~/teleop_system
 # Start server with RM75B model
 python run_server.py \
     --backend mujoco \
-    --mujoco-xml robots/rm75b_vr.xml \
+    --mujoco-xml robots/rm75b/rm75b_vr.xml \
     --mujoco-ee ee_site \
     --port 8000
 ```
@@ -145,7 +145,7 @@ The `rm75b_vr.xml` file contains:
 ```bash
 python run_server.py \
     --backend mujoco \
-    --mujoco-xml robots/rm75b_vr.xml \    # Robot model
+    --mujoco-xml robots/rm75b/rm75b_vr.xml \    # Robot model
     --mujoco-ee ee_site \                  # IK control site
     --mujoco-camera tracking \             # Default camera
     --ik-damping 0.05 \                    # IK solver damping
@@ -192,7 +192,7 @@ python -c "
 import mujoco
 import mujoco.viewer
 
-m = mujoco.MjModel.from_xml_path('robots/rm75b_vr.xml')
+m = mujoco.MjModel.from_xml_path('robots/rm75b/rm75b_vr.xml')
 d = mujoco.MjData(m)
 mujoco.viewer.launch(m, d)
 "
@@ -263,7 +263,7 @@ mujoco.viewer.launch(m, d)
    ```bash
    python -c "
    import mujoco
-   m = mujoco.MjModel.from_xml_path('robots/rm75b_vr.xml')
+   m = mujoco.MjModel.from_xml_path('robots/rm75b/rm75b_vr.xml')
    print('Gripper joints:', [m.joint(i).name for i in range(m.njnt)])
    "
    ```
@@ -494,7 +494,7 @@ top -pid $(pgrep -f "run_server.py")
 - **Start Server:** `./start_rm75b_vr.sh`
 - **Web Interface:** `http://localhost:8000/web/`
 - **API Stats:** `http://localhost:8000/api/v1/statistics`
-- **MuJoCo Viewer:** `python -m mujoco.viewer robots/rm75b_vr.xml`
+- **MuJoCo Viewer:** `python -m mujoco.viewer robots/rm75b/rm75b_vr.xml`
 
 ---
 

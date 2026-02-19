@@ -31,3 +31,18 @@ test_camera_frames/
 
 # Empty dirs
 librealsense/
+*.pem
+*.key
+*.crt
+*.p12
+*.cer
+*.der
+*.jks
+*.keystore
+*.kdbx
+.env
+.env.*
+secrets/
+certs/
+keys/
+ngrok.yml

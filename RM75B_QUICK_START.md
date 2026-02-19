@@ -11,7 +11,7 @@ python test_rm75b_setup.py
 # Start VR server
 python run_server.py \
     --backend mujoco \
-    --mujoco-xml robots/rm75b_vr.xml \
+    --mujoco-xml robots/rm75b/rm75b_vr.xml \
     --mujoco-ee ee_site \
     --port 8000
 ```
@@ -46,7 +46,7 @@ adb reverse tcp:8000 tcp:8000
 
 ```
 ~/teleop_system/
-├── robots/rm75b_vr.xml          # MuJoCo model (7-DOF)
+├── robots/rm75b/rm75b_vr.xml          # MuJoCo model (7-DOF)
 ├── test_rm75b_setup.py          # Verification script
 ├── RM75B_VR_SETUP.md            # Detailed guide
 └── start_rm75b_vr.sh            # Auto-start script
@@ -65,7 +65,7 @@ curl http://localhost:8000/api/v1/statistics | python -m json.tool
 python client/keyboard_client.py
 
 # 4. View in MuJoCo viewer
-python -m mujoco.viewer robots/rm75b_vr.xml
+python -m mujoco.viewer robots/rm75b/rm75b_vr.xml
 ```
 
 ## 🔧 Common Issues

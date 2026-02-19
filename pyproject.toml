@@ -26,3 +26,10 @@ dependencies = [
 [project.scripts]
 drt-server = "server.teleop_server:main"
 drt-client = "client.keyboard_client:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+markers = [
+  "security: 安全扫描测试"
+]

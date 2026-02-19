@@ -112,7 +112,7 @@ def main():
         print("\nIn your terminal, run:")
         print(f"{BOLD}cd {teleop_dir}{RESET}")
         print(f"{BOLD}python run_server.py --backend mujoco \\{RESET}")
-        print(f"{BOLD}  --mujoco-xml robots/so101.xml \\{RESET}")
+        print(f"{BOLD}  --mujoco-xml robots/so101/so101.xml \\{RESET}")
         print(f"{BOLD}  --mujoco-ee gripperframe{RESET}")
         
         print("\nExpected output:")
@@ -141,7 +141,7 @@ def main():
         wait_for_user("Press Enter when Mock test is done...")
         
         print("\n📝 Test 2: MuJoCo Backend")
-        print(f"{BOLD}python run_server.py --backend mujoco --mujoco-xml robots/so101.xml --mujoco-ee gripperframe{RESET}")
+        print(f"{BOLD}python run_server.py --backend mujoco --mujoco-xml robots/so101/so101.xml --mujoco-ee gripperframe{RESET}")
         print("→ Verify server starts and loads robot model")
         print("→ Check API returns robot position")
         print("→ Press Ctrl+C to stop")

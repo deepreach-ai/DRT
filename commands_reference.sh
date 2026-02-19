@@ -14,7 +14,7 @@ python test_rm75b_setup.py
 python -c "import mujoco; print(f'MuJoCo {mujoco.__version__} installed')"
 
 # 3. View robot model in MuJoCo viewer
-python -m mujoco.viewer robots/rm75b_vr.xml
+python -m mujoco.viewer robots/rm75b/rm75b_vr.xml
 
 # 4. Check if server file exists
 ls -lh run_server.py
@@ -26,14 +26,14 @@ ls -lh run_server.py
 # Basic start (recommended)
 python run_server.py \
     --backend mujoco \
-    --mujoco-xml robots/rm75b_vr.xml \
+    --mujoco-xml robots/rm75b/rm75b_vr.xml \
     --mujoco-ee ee_site \
     --port 8000
 
 # Start with custom IK parameters (smoother but slower)
 python run_server.py \
     --backend mujoco \
-    --mujoco-xml robots/rm75b_vr.xml \
+    --mujoco-xml robots/rm75b/rm75b_vr.xml \
     --mujoco-ee ee_site \
     --ik-damping 0.1 \
     --ik-max-iters 30 \
@@ -42,7 +42,7 @@ python run_server.py \
 # Start with slower motion (for beginners)
 python run_server.py \
     --backend mujoco \
-    --mujoco-xml robots/rm75b_vr.xml \
+    --mujoco-xml robots/rm75b/rm75b_vr.xml \
     --mujoco-ee ee_site \
     --max-qpos-step 0.05 \
     --port 8000
@@ -126,7 +126,7 @@ open http://localhost:8000/web/
 # Monitor server logs (run server with log output)
 python run_server.py \
     --backend mujoco \
-    --mujoco-xml robots/rm75b_vr.xml \
+    --mujoco-xml robots/rm75b/rm75b_vr.xml \
     --mujoco-ee ee_site 2>&1 | tee server.log
 
 # Watch server resource usage
@@ -138,7 +138,7 @@ import time
 import mujoco
 import mujoco.viewer
 
-m = mujoco.MjModel.from_xml_path('robots/rm75b_vr.xml')
+m = mujoco.MjModel.from_xml_path('robots/rm75b/rm75b_vr.xml')
 d = mujoco.MjData(m)
 
 start = time.time()
@@ -218,7 +218,7 @@ ps aux | grep python
 
 # Complete test sequence
 python test_rm75b_setup.py && \
-python run_server.py --backend mujoco --mujoco-xml robots/rm75b_vr.xml --mujoco-ee ee_site
+python run_server.py --backend mujoco --mujoco-xml robots/rm75b/rm75b_vr.xml --mujoco-ee ee_site
 
 # Find and display local IP
 echo "Connect Quest to: http://$(ifconfig | grep "inet " | grep -v 127.0.0.1 | awk '{print $2}' | head -1):8000/web/"

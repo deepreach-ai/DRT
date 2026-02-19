@@ -19,7 +19,7 @@ A complete VR teleoperation system for the REALMAN RM75B robot arm using Meta Qu
 
 | File | Purpose | Size |
 |------|---------|------|
-| `robots/rm75b_vr.xml` | MuJoCo robot model | ~8 KB |
+| `robots/rm75b/rm75b_vr.xml` | MuJoCo robot model | ~8 KB |
 | `test_rm75b_setup.py` | Automated verification | ~8 KB |
 | `start_rm75b_vr.sh` | Auto-start script | ~4 KB |
 | `RM75B_VR_SETUP.md` | Complete setup guide | ~15 KB |
@@ -45,7 +45,7 @@ python test_rm75b_setup.py
 # Start server
 python run_server.py \
     --backend mujoco \
-    --mujoco-xml robots/rm75b_vr.xml \
+    --mujoco-xml robots/rm75b/rm75b_vr.xml \
     --mujoco-ee ee_site
 
 # Connect Quest 3S
@@ -107,12 +107,12 @@ python test_rm75b_setup.py
 
 # Start server (basic)
 python run_server.py --backend mujoco \
-    --mujoco-xml robots/rm75b_vr.xml \
+    --mujoco-xml robots/rm75b/rm75b_vr.xml \
     --mujoco-ee ee_site
 
 # Start server (slower, smoother)
 python run_server.py --backend mujoco \
-    --mujoco-xml robots/rm75b_vr.xml \
+    --mujoco-xml robots/rm75b/rm75b_vr.xml \
     --mujoco-ee ee_site \
     --max-qpos-step 0.05
 
@@ -120,7 +120,7 @@ python run_server.py --backend mujoco \
 curl http://localhost:8000/api/v1/statistics | python -m json.tool
 
 # View robot model
-python -m mujoco.viewer robots/rm75b_vr.xml
+python -m mujoco.viewer robots/rm75b/rm75b_vr.xml
 
 # USB tethering
 adb reverse tcp:8000 tcp:8000

@@ -12,6 +12,6 @@ echo "📦 Uploading MuJoCo assets to $SERVER_IP..."
 ssh -o StrictHostKeyChecking=no ubuntu@$SERVER_IP "mkdir -p ~/drt/robots"
 
 # Upload XMLs and assets folder
-scp -o StrictHostKeyChecking=no -r robots/so101.xml robots/teleop_scene.xml robots/assets/ ubuntu@$SERVER_IP:~/drt/robots/
+scp -o StrictHostKeyChecking=no -r robots/so101/so101.xml robots/teleop_scene.xml robots/so101/assets/ ubuntu@$SERVER_IP:~/drt/robots/
 
 echo "✅ Assets uploaded successfully."

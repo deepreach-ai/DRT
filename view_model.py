@@ -2,7 +2,7 @@ import mujoco as mj
 import mujoco.viewer as viewer
 import os
 
-model_path = 'robots/rm75b_vr_v2.xml'
+model_path = 'robots/rm75b/rm75b_vr_v2.xml'
 print(f"Loading model from: {model_path}")
 
 try:

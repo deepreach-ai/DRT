@@ -20,7 +20,7 @@
 ### How to Use
 ```bash
 # Terminal 1: Start server
-python run_server.py --backend mujoco --mujoco-xml robots/so101.xml --mujoco-ee gripperframe
+python run_server.py --backend mujoco --mujoco-xml robots/so101/so101.xml --mujoco-ee gripperframe
 
 # Terminal 2: Start web UI
 python client/web_server.py
@@ -87,7 +87,7 @@ J ← Yaw → L
 ### How to Use
 ```bash
 # Terminal 1: Start server
-python run_server.py --backend mujoco --mujoco-xml robots/so101.xml --mujoco-ee gripperframe
+python run_server.py --backend mujoco --mujoco-xml robots/so101/so101.xml --mujoco-ee gripperframe
 
 # Terminal 2: Run Python client
 python client/keyboard_client.py

@@ -10,7 +10,7 @@ echo ""
 
 # Configuration
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-ROBOT_XML="${SCRIPT_DIR}/robots/rm75b_vr_v2.xml"
+ROBOT_XML="${SCRIPT_DIR}/robots/rm75b/rm75b_vr_v2.xml"
 EE_SITE="ee_site"
 PORT=8000
 

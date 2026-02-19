@@ -48,11 +48,11 @@ case $choice in
     2)
         echo ""
         echo "Starting MuJoCo Backend Server..."
-        echo "Using robot model: robots/so101.xml"
+        echo "Using robot model: robots/so101/so101.xml"
         echo "Press Ctrl+C to stop"
         echo ""
         python run_server.py --backend mujoco \
-            --mujoco-xml robots/so101.xml \
+            --mujoco-xml robots/so101/so101.xml \
             --mujoco-ee gripperframe
         ;;
     3)
@@ -77,7 +77,7 @@ case $choice in
         echo "This will open 2 terminals"
         echo ""
         echo "Terminal 1: Teleop Server (MuJoCo)"
-        osascript -e 'tell app "Terminal" to do script "cd '"$TELEOP_DIR"' && python run_server.py --backend mujoco --mujoco-xml robots/so101.xml --mujoco-ee gripperframe"'
+        osascript -e 'tell app "Terminal" to do script "cd '"$TELEOP_DIR"' && python run_server.py --backend mujoco --mujoco-xml robots/so101/so101.xml --mujoco-ee gripperframe"'
         sleep 3
         echo "Terminal 2: Web UI Server"
         osascript -e 'tell app "Terminal" to do script "cd '"$TELEOP_DIR"' && python client/web_server.py"'

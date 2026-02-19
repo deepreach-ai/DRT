@@ -4,7 +4,7 @@ import numpy as np
 from transforms3d.euler import mat2euler
 
 def main():
-    model_path = "../robots/so101.xml"
+    model_path = "../robots/so101/so101.xml"
     try:
         model = mujoco.MjModel.from_xml_path(model_path)
     except Exception as e:

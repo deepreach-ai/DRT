@@ -41,7 +41,7 @@ python -c "import mujoco; print(f'MuJoCo version: {mujoco.__version__}')"
 ls -la robots/so101_new.xml
 
 # Check if mesh assets exist
-ls -la robots/assets/*.stl | wc -l
+ls -la robots/so101/assets/*.stl | wc -l
 ```
 
 **Expected Output:**
@@ -412,7 +412,7 @@ pip install -r server/requirements.txt
 ```bash
 # Solution: Check file path and mesh directory
 ls -la robots/so101_new.xml
-ls -la robots/assets/*.stl
+ls -la robots/so101/assets/*.stl
 
 # Try absolute path
 python run_server.py --backend mujoco \

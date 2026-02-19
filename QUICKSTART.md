@@ -30,7 +30,7 @@ python run_server.py --backend mock
 ### MuJoCo simulation (SO-101 example)
 ```bash
 python run_server.py --backend mujoco \
-  --mujoco-xml robots/so101.xml \
+  --mujoco-xml robots/so101/so101.xml \
   --mujoco-ee gripperframe
 ```
 

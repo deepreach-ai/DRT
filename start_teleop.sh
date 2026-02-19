@@ -26,7 +26,7 @@ case $BACKEND in
     mujoco)
         echo "Starting with MuJoCo backend (SO-101 simulation)..."
         python run_server.py --backend mujoco \
-            --mujoco-xml robots/so101.xml \
+            --mujoco-xml robots/so101/so101.xml \
             --mujoco-ee gripperframe \
             --host 0.0.0.0 \
             --port 8000

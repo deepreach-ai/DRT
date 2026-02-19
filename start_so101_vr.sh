@@ -10,7 +10,7 @@ echo ""
 
 # Configuration
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-ROBOT_XML="${SCRIPT_DIR}/robots/so101.xml"
+ROBOT_XML="${SCRIPT_DIR}/robots/so101/so101.xml"
 EE_SITE="gripperframe"
 PORT=8000
 

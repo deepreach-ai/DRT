@@ -48,7 +48,7 @@ Complete these steps in order to get VR control working.
 
 - [ ] **Verify new files exist**
   ```bash
-  ls -lh robots/rm75b_vr.xml
+  ls -lh robots/rm75b/rm75b_vr.xml
   ls -lh test_rm75b_setup.py
   ls -lh RM75B_VR_SETUP.md
   ```
@@ -89,7 +89,7 @@ Complete these steps in order to get VR control working.
 
 - [ ] **View robot in MuJoCo viewer**
   ```bash
-  python -m mujoco.viewer robots/rm75b_vr.xml
+  python -m mujoco.viewer robots/rm75b/rm75b_vr.xml
   ```
   
   - [ ] Robot model appears
@@ -138,7 +138,7 @@ Complete these steps in order to get VR control working.
   ```bash
   python run_server.py \
       --backend mujoco \
-      --mujoco-xml robots/rm75b_vr.xml \
+      --mujoco-xml robots/rm75b/rm75b_vr.xml \
       --mujoco-ee ee_site \
       --port 8000
   ```
@@ -380,7 +380,7 @@ lsof -i :8000
 lsof -ti :8000 | xargs kill -9
 
 # Try again
-python run_server.py --backend mujoco --mujoco-xml robots/rm75b_vr.xml --mujoco-ee ee_site
+python run_server.py --backend mujoco --mujoco-xml robots/rm75b/rm75b_vr.xml --mujoco-ee ee_site
 ```
 
 ### Quest can't connect (WiFi)
@@ -425,7 +425,7 @@ curl http://localhost:8000/api/v1/statistics
 # Restart server with slower motion
 python run_server.py \
     --backend mujoco \
-    --mujoco-xml robots/rm75b_vr.xml \
+    --mujoco-xml robots/rm75b/rm75b_vr.xml \
     --mujoco-ee ee_site \
     --max-qpos-step 0.05
 ```
@@ -438,7 +438,7 @@ python run_server.py \
 # Or reduce IK quality (faster but less accurate)
 python run_server.py \
     --backend mujoco \
-    --mujoco-xml robots/rm75b_vr.xml \
+    --mujoco-xml robots/rm75b/rm75b_vr.xml \
     --mujoco-ee ee_site \
     --ik-max-iters 15
 ```

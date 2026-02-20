@@ -13,7 +13,8 @@
     {
         "imports": {
             "three": "https://esm.sh/three@0.158.0",
-            "urdf-loader": "https://esm.sh/urdf-loader@0.12.6?deps=three@0.158.0"
+            "urdf-loader": "https://esm.sh/urdf-loader@0.12.6?deps=three@0.158.0",
+            "three/examples/jsm/loaders/STLLoader": "https://esm.sh/three@0.158.0/examples/jsm/loaders/STLLoader.js"
         }
     }
     </script>
@@ -393,9 +394,20 @@
     <script type="module">
       import * as THREE from 'three';
       import URDFLoader from 'urdf-loader';
+      import { STLLoader } from 'three/examples/jsm/loaders/STLLoader';
 
       // Expose globally for debugging or other scripts
       window.THREE = THREE;
+      
+      // URDFLoader expects STLLoader to be passed in the manager or options, 
+      // OR it tries to find it on THREE.STLLoader.
+      // However, THREE namespace might be sealed/non-extensible in some environments.
+      // Let's try to set it, but catch errors.
+      try {
+          THREE.STLLoader = STLLoader;
+      } catch (e) {
+          console.warn('[VR] Could not attach STLLoader to THREE namespace:', e);
+      }
       
       // ========================================
       // GLOBAL STATE
@@ -438,6 +450,17 @@
       async function init() {
         console.log('[VR] Initializing...');
         
+        // Ensure simulation button is visible immediately
+        $('btn-simulate-vr').style.display = 'block';
+        
+        // Check for Virtual Mode (no video streams)
+        const params = new URLSearchParams(window.location.search);
+        state.isVirtual = params.get('virtual') === '1' || params.get('mode') === 'virtual';
+        if (state.isVirtual) {
+            console.log('[VR] Virtual Mode enabled: Video streams disabled');
+            $('video-status').innerHTML = '<span class="pill ok">Virtual Mode</span>';
+        }
+        
         // Check Secure Context
         if (!window.isSecureContext) {
             console.warn('[VR] Insecure context detected. WebXR requires HTTPS or localhost.');
@@ -472,7 +495,6 @@
         // Use origin directly to support ngrok (no port 8000) and localhost (with port) correctly
         $('server-url').value = window.location.origin;
 
-        const params = new URLSearchParams(window.location.search);
         if (params.get('embed') === '1') {
             document.body.classList.add('embed');
         }
@@ -507,6 +529,9 @@
       // ========================================
       
       async function checkXRSupport() {
+        // Force simulation button to be visible for debugging
+        $('btn-simulate-vr').style.display = 'block';
+        
         if ('xr' in navigator) {
           try {
             const supported = await navigator.xr.isSessionSupported('immersive-vr');
@@ -516,17 +541,14 @@
             } else {
               updateStatus('xr-support', 'Not Found (Use Simulator)', 'bad');
               console.warn('[VR] WebXR not supported on this device');
-              $('btn-simulate-vr').style.display = 'block';
             }
           } catch (err) {
             updateStatus('xr-support', 'Error (Use Simulator)', 'bad');
             console.error('[VR] Error checking WebXR support:', err);
-            $('btn-simulate-vr').style.display = 'block';
           }
         } else {
           updateStatus('xr-support', 'Not Found (Use Simulator)', 'bad');
           console.warn('[VR] navigator.xr not found');
-          $('btn-simulate-vr').style.display = 'block';
         }
       }
       
@@ -557,14 +579,14 @@
         window.teleopClient.setToken(token);
         window.teleopClient.connect();
 
-        if (videoEnabled) {
+        if (videoEnabled && !state.isVirtual) {
           initVideoStreams();
         } else {
-          console.log('[VR] Video disabled by server, skipping stream init');
+          console.log('[VR] Video disabled (Server: ' + videoEnabled + ', Virtual: ' + state.isVirtual + '), skipping stream init');
           state.videoStreams.left = false;
           state.videoStreams.right = false;
           state.videoStreams.depth = false;
-          updateStatus('video-status', 'Disabled', 'warn');
+          updateStatus('video-status', state.isVirtual ? 'Virtual Mode' : 'Disabled', 'warn');
         }
 
         state.connected = true;
@@ -1000,6 +1022,13 @@
       
       function createVideoScreens() {
         if (!THREE) return;
+        
+        // Skip video screens in virtual mode
+        if (state.isVirtual) {
+            console.log('[VR] Skipping video screens (Virtual Mode)');
+            return;
+        }
+
         // Left eye screen (shows left camera)
         // Use pre-created texture if available, or create placeholder
         const leftMat = new THREE.MeshBasicMaterial({ 
@@ -1040,23 +1069,114 @@
       
       // Robot Loading
       let ghostRobot = null;
-      function loadRobotModel() {
-          if (!URDFLoader) return;
+      async function loadRobotModel() {
+          const params = new URLSearchParams(window.location.search);
+          const urdfFile = params.get('urdf') || 'rm65/rm65_w_gripper'; // Default
+          const urdfPath = `/assets/robots/${urdfFile}.urdf`;
           
-          const urlParams = new URLSearchParams(window.location.search);
-          const urdfName = urlParams.get('urdf') || 'so101';
-          const urdfPath = `/assets/robots/${urdfName}.urdf`;
+          console.log(`[VR] Loading robot model: ${urdfFile}`);
+          console.log(`[VR] URDF Path: ${urdfPath}`);
           
-          console.log(`[VR] Loading robot model: ${urdfPath}`);
-          const loader = new URDFLoader();
+          // Let's configure the loader path
+          // URDF is loaded from /assets/robots/rm75b/rm75b_w_gripper.urdf
+          // When loader sees "package://crt_ctag2f90d_gripper_visualization/...", it replaces "package://" with the package path.
+          // The package path should be relative to the URDF file location if it's relative.
+          // If we use "../crt_ctag2f90d_gripper_visualization", it means:
+          // /assets/robots/rm75b/../crt_ctag2f90d_gripper_visualization -> /assets/robots/crt_ctag2f90d_gripper_visualization
+          // BUT gripper is at /assets/crt_ctag2f90d_gripper_visualization (one level up from robots dir?)
+          // Check file structure:
+          // /Users/ziguo/teleop_system/robots/rm75b/rm75b_w_gripper.urdf (Server serves this at /assets/robots/rm75b/rm75b_w_gripper.urdf)
+          // /Users/ziguo/teleop_system/crt_ctag2f90d_gripper_visualization/ (Server serves this at /assets/crt_ctag2f90d_gripper_visualization?)
           
-          loader.packages = { 
-              'RM75-B': '/assets/robots/rm75b',
-              'so101': '/assets/robots',
-              'crt_ctag2f90d_gripper_visualization': '/assets/gripper'
+          // Wait, how does server serve assets?
+          // Usually /assets/ maps to project root or specific folders?
+          // If server serves project root as assets root?
+          // Let's assume standard layout.
+          
+          // If URDF is at /assets/robots/rm75b/rm75b_w_gripper.urdf
+          // Then relative path "../../crt_ctag2f90d_gripper_visualization" would go to /assets/crt_ctag2f90d_gripper_visualization
+          
+          const manager = new THREE.LoadingManager();
+          const loader = new URDFLoader(manager);
+          
+          loader.packages = {
+             'crt_ctag2f90d_gripper_visualization': '/assets/crt_ctag2f90d_gripper_visualization', // Use absolute path to be safe
+             'realman_75': '/assets/robots/rm75b',
+             // Add mappings for RM75B base meshes if they use package://rm75_description or similar
+             'rm75_description': '/assets/robots/rm75b',
+             'realman_description': '/assets/robots/rm75b',
+             // Add mappings for RM75-B (used in rm75b_w_gripper.urdf)
+             'RM75-B': '/assets/robots/rm75b'
           };
           
-          // 1. Load Main Robot (Actual state)
+          // Debugging
+          console.log('[VR] URDF loader created. Packages:', loader.packages);
+          console.log('[VR] Loading URDF from:', urdfPath);
+          
+          manager.onStart = function ( url, itemsLoaded, itemsTotal ) {
+              console.log( '[VR] Started loading file: ' + url + '.\nLoaded ' + itemsLoaded + ' of ' + itemsTotal + ' files.' );
+          };
+          manager.onLoad = function ( ) {
+              console.log( '[VR] Loading complete!');
+          };
+          manager.onProgress = function ( url, itemsLoaded, itemsTotal ) {
+              console.log( '[VR] Loading file: ' + url + '.\nLoaded ' + itemsLoaded + ' of ' + itemsTotal + ' files.' );
+          };
+          manager.onError = function ( url ) {
+              console.log( '[VR] There was an error loading ' + url );
+              $('video-status').innerHTML = '<span class="pill bad">Load Error</span>';
+          };
+
+          // NOTE: If server uses a different mapping, we might need absolute paths.
+          // e.g. /assets/crt_ctag2f90d_gripper_visualization
+          // Let's try to detect if we need absolute paths or just fix the relative one.
+          // For now, "../../" should work if the file structure on server mirrors the disk.
+          
+          // 2. Monkey-patch loadMeshCb if STLLoader is missing from THREE
+          // This is the fallback if THREE.STLLoader assignment failed
+          if (!THREE.STLLoader) {
+              console.log('[VR] Monkey-patching loader.loadMeshCb for STLLoader support');
+              const originalLoadMeshCb = loader.loadMeshCb;
+              loader.loadMeshCb = function(path, ext, done) {
+                  // Resolve path manually if it starts with package://
+                  let resolvedPath = path;
+                  if (path.startsWith('package://')) {
+                      const parts = path.replace('package://', '').split('/');
+                      const pkgName = parts.shift();
+                      if (loader.packages[pkgName]) {
+                          resolvedPath = loader.packages[pkgName] + '/' + parts.join('/');
+                      } else {
+                          console.warn(`[VR] Package ${pkgName} not found in loader.packages`);
+                      }
+                  } else if (path.includes('/meshes/')) {
+                      // Check for RM75B base meshes which might not use package://
+                      // e.g. "meshes/base_link.STL" relative to URDF
+                      // If it's relative, URDFLoader handles it.
+                      // But let's log it.
+                  }
+                  
+                  console.log(`[VR] Loading mesh: ${path} -> ${resolvedPath}`);
+                  
+                  if (ext === 'stl' || ext === 'STL') { // Case insensitive check
+                      if (this.manager) this.manager.itemStart(resolvedPath);
+                      const stlLoader = new STLLoader(this.manager);
+                      stlLoader.load(resolvedPath, (geom) => {
+                          const mat = new THREE.MeshStandardMaterial({ color: 0xaaaaaa, roughness: 0.5, metalness: 0.5 });
+                          const mesh = new THREE.Mesh(geom, mat);
+                          done(mesh);
+                          if (this.manager) this.manager.itemEnd(resolvedPath);
+                      }, undefined, (err) => {
+                          console.error('Failed to load STL:', resolvedPath, err);
+                          if (this.manager) this.manager.itemError(resolvedPath);
+                          if (this.manager) this.manager.itemEnd(resolvedPath); // Ensure completion
+                      });
+                  } else {
+                      // Fallback to original for other formats (DAE, OBJ)
+                      if (originalLoadMeshCb) originalLoadMeshCb.call(this, path, ext, done);
+                  }
+              };
+          }
+          
           loader.load(urdfPath, result => {
               state.robot = result;
               state.robot.position.set(0, 0.8, -0.8);
@@ -1176,25 +1296,40 @@
             const buttons = gp.buttons;
             const axes = gp.axes;
             
+            // DEBUG: Log controller input
+            if (handedness === 'right' && (axes[2] !== 0 || axes[3] !== 0 || buttons[1].pressed)) {
+                // Throttle log to avoid spam
+                if (Math.random() < 0.05) {
+                    console.log(`[VR] Right Ctrl: Grip=${buttons[1].pressed}, Axes=[${axes.map(a => a.toFixed(2)).join(',')}]`);
+                }
+            }
+            
             let dx = 0, dy = 0, dz = 0;
             let droll = 0, dpitch = 0, dyaw = 0;
             let gripper = -1;
 
             // 1. CLUTCH & 6-DoF
             const isClutchPressed = buttons[1] && buttons[1].pressed;
+            // Joystick Axes: axes[2] is X (left/right), axes[3] is Y (up/down)
+            // Note: Standard mapping is 2,3 for joystick, but sometimes 0,1 if no touchpad
+            // Let's try both mapping just in case
+            const joyX = axes[2] || axes[0] || 0;
+            const joyY = axes[3] || axes[1] || 0;
 
             if (isClutchPressed) {
+                // ... Existing hand tracking code ...
                 const pose = frame.getPose(inputSource.gripSpace, refSpace);
                 if (pose) {
-                    const currPos = pose.transform.position;
-                    const currRot = pose.transform.orientation;
-                    const lastPose = state.controllers[handedness].lastPose;
-                    
-                    if (lastPose) {
-                        // Position Delta
+                   // ... (Keep existing logic)
+                   const currPos = pose.transform.position;
+                   const currRot = pose.transform.orientation;
+                   const lastPose = state.controllers[handedness].lastPose;
+                   
+                   if (lastPose) {
+                       // ... (Keep existing delta calculation)
                         const dPosVR = new THREE.Vector3().subVectors(currPos, lastPose.position);
                         dPosVR.applyMatrix4(VR_TO_ROBOT);
-                        const POS_SCALE = 0.8; // Reduced from 1.5 to 0.8 for better control
+                        const POS_SCALE = 0.8; 
                         dx = dPosVR.x * POS_SCALE;
                         dy = dPosVR.y * POS_SCALE;
                         dz = dPosVR.z * POS_SCALE;
@@ -1211,16 +1346,28 @@
                         droll = euler.x * ROT_SCALE;
                         dpitch = euler.y * ROT_SCALE;
                         dyaw = euler.z * ROT_SCALE;
-                    }
-                    state.controllers[handedness].lastPose = {
+                   }
+                   state.controllers[handedness].lastPose = {
                         position: new THREE.Vector3().copy(currPos),
                         orientation: new THREE.Quaternion(currRot.x, currRot.y, currRot.z, currRot.w)
-                    };
+                   };
                 }
             } else {
-                // Clutch 未按下：不允许任何位姿或夹爪动作
+                // Joystick Control (When Clutch NOT pressed)
+                // Map Joystick Y to Z (Up/Down)
+                // Map Joystick X to Y (Left/Right)
+                // This is a simple fallback control
+                if (Math.abs(joyX) > 0.1 || Math.abs(joyY) > 0.1) {
+                    dy = -joyX * 0.02; // Left/Right
+                    dz = -joyY * 0.02; // Up/Down
+                    // dx (Forward/Back) requires another axis or button modifier
+                }
+                
                 state.controllers[handedness].lastPose = null;
-                dx = 0; dy = 0; dz = 0;
+                // Don't reset dx, dy, dz if we just set them from joystick
+                if (Math.abs(joyX) <= 0.1 && Math.abs(joyY) <= 0.1) {
+                    dx = 0; dy = 0; dz = 0;
+                }
                 droll = 0; dpitch = 0; dyaw = 0;
                 gripper = -1;
             }
@@ -1237,11 +1384,17 @@
             }
 
             // Update Teleop Client with handedness
-            if (isClutchPressed) {
+            // Send command if EITHER clutch is pressed OR joystick is moved
+            const isJoystickActive = Math.abs(joyX) > 0.1 || Math.abs(joyY) > 0.1;
+            
+            if (isClutchPressed || isJoystickActive) {
+                // Debug log when sending command
+                if (Math.random() < 0.05) console.log(`[VR] Sending motion: dy=${dy.toFixed(3)}, dz=${dz.toFixed(3)}`);
+                
                 window.teleopClient.accumulateVRMotion({ dx, dy, dz, droll, dpitch, dyaw }, handedness);
                 window.teleopClient.updateVRInput({ dx: 0, dy: 0, dz: 0, droll: 0, dpitch: 0, dyaw: 0, gripper, reference_frame: 'base' }, handedness);
             } else {
-                // 未按下 Clutch：只发送心跳，不包含运动或夹爪动作
+                // 未按下 Clutch 且 摇杆未动：只发送心跳，不包含运动或夹爪动作
                 window.teleopClient.updateVRInput({ dx: 0, dy: 0, dz: 0, droll: 0, dpitch: 0, dyaw: 0, gripper: -1, reference_frame: 'end_effector' }, handedness);
             }
         }

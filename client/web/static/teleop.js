@@ -394,6 +394,7 @@ class TeleopClient {
                               Math.abs(command.dpitch) > 0.0001 || Math.abs(command.dyaw) > 0.0001 ||
                               command.gripper_state !== undefined;
 
+            // Always send if has motion, otherwise just heartbeat for right hand
             if (hasMotion || handedness === "right") {
                 try {
                     this.lastCommandTime = Date.now();

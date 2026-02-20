@@ -31,6 +31,7 @@ def main():
     parser.add_argument("--isaac-port", type=int, help="Isaac Sim port")
     parser.add_argument("--ssl-key", help="Path to SSL key file (for HTTPS/WebXR)")
     parser.add_argument("--ssl-cert", help="Path to SSL cert file (for HTTPS/WebXR)")
+    parser.add_argument("--robot-config", help="Path to robot config YAML")
     parser.add_argument("--no-server", action="store_true",
                        help="Initialize only, don't run server")
 
@@ -43,6 +44,10 @@ def main():
         os.environ["TELEOP_MUJOCO_EE_SITE"] = args.mujoco_ee
     if args.mujoco_camera:
         os.environ["TELEOP_MUJOCO_CAMERA"] = args.mujoco_camera
+        
+    # Set environment variable for robot config
+    if args.robot_config:
+        os.environ["TELEOP_ROBOT_CONFIG"] = os.path.abspath(args.robot_config)
 
     # Set environment variables for SO-ARM backend
     if args.soarm_port:
@@ -74,7 +79,7 @@ def main():
             if args.isaac_port:
                 backend_config['port'] = args.isaac_port
 
-        server = TeleoperationServer(backend_type=args.backend, backend_config=backend_config)
+        server = TeleoperationServer(backend_type=args.backend, backend_config=backend_config, robot_config_path=args.robot_config)
         server.initialize()
         print(f"Server initialized with {args.backend} backend")
         print("Press Ctrl+C to exit...")
@@ -89,7 +94,7 @@ def main():
         print(f"Starting teleoperation server on {args.host}:{args.port}")
         print(f"Using backend: {args.backend}")
         run_server(host=args.host, port=args.port, backend_type=args.backend, 
-                  ssl_keyfile=args.ssl_key, ssl_certfile=args.ssl_cert)
+                  ssl_keyfile=args.ssl_key, ssl_certfile=args.ssl_cert, robot_config=args.robot_config)
 
 
 if __name__ == "__main__":

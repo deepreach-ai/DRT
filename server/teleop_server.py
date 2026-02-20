@@ -15,7 +15,7 @@ import time
 from datetime import datetime
 import json
 import os
-
+import yaml
 from models import DeltaCommand, JointCommand, RobotState, TeleopStatus, WorkspaceLimits
 from safety_gate import SafetyGate
 from control_logic import TeleoperationController
@@ -26,13 +26,14 @@ from web_support import AuthManager, SessionRecorder, mjpeg_stream, render_statu
 class TeleoperationServer:
     """Main teleoperation server class"""
     
-    def __init__(self, backend_type: str = 'mock', backend_config: Optional[Dict] = None):
+    def __init__(self, backend_type: str = 'mock', backend_config: Optional[Dict] = None, robot_config_path: Optional[str] = None):
         """
         Initialize teleoperation server
         
         Args:
             backend_type: Type of robot backend ('mock' or 'isaac')
             backend_config: Configuration for the backend
+            robot_config_path: Path to robot configuration YAML
         """
         # Configuration
         self.backend_type = backend_type
@@ -40,7 +41,29 @@ class TeleoperationServer:
         
         # Initialize components
         self.safety_gate = SafetyGate(timeout=0.5)
-        self.controller = TeleoperationController()
+        
+        # Load workspace limits from config if provided
+        workspace_limits = None
+        if robot_config_path and os.path.exists(robot_config_path):
+            print(f"[Server] Loading robot config from {robot_config_path}")
+            try:
+                with open(robot_config_path, 'r') as f:
+                    config = yaml.safe_load(f)
+                    if 'workspace_limits' in config:
+                        limits = config['workspace_limits']
+                        workspace_limits = WorkspaceLimits(
+                            min_x=limits.get('x', [-1.0, 1.0])[0],
+                            max_x=limits.get('x', [-1.0, 1.0])[1],
+                            min_y=limits.get('y', [-1.0, 1.0])[0],
+                            max_y=limits.get('y', [-1.0, 1.0])[1],
+                            min_z=limits.get('z', [0.0, 1.5])[0],
+                            max_z=limits.get('z', [0.0, 1.5])[1]
+                        )
+                        print(f"[Server] Workspace limits loaded: {workspace_limits}")
+            except Exception as e:
+                print(f"[Server] Error loading robot config: {e}")
+        
+        self.controller = TeleoperationController(workspace_limits=workspace_limits)
         self.backend = None
         self.connected_clients: List[str] = []
         self.video_enabled = True
@@ -228,7 +251,7 @@ if os.path.isdir(_robots_dir):
 # Mount gripper directory
 _gripper_dir = os.path.join(_repo_dir, "crt_ctag2f90d_gripper_visualization")
 if os.path.isdir(_gripper_dir):
-    app.mount("/assets/gripper", StaticFiles(directory=_gripper_dir), name="gripper")
+    app.mount("/assets/crt_ctag2f90d_gripper_visualization", StaticFiles(directory=_gripper_dir), name="gripper")
 
 # CORS middleware
 app.add_middleware(
@@ -252,6 +275,8 @@ def get_server() -> TeleoperationServer:
     if _server_instance is None:
         import os
         backend = os.getenv("TELEOP_BACKEND", "mock")
+        robot_config = os.getenv("TELEOP_ROBOT_CONFIG")
+        
         backend_config = {}
         if backend.lower() == "isaac":
             isaac_host = os.getenv("TELEOP_ISAAC_HOST", "0.0.0.0")
@@ -268,7 +293,8 @@ def get_server() -> TeleoperationServer:
             left_port = os.getenv("TELEOP_LEFT_PORT", "/dev/tty.usbmodem5B3E1187881")
             right_port = os.getenv("TELEOP_RIGHT_PORT", "/dev/tty.usbmodem5B3E1224691")
             backend_config = {"left_port": left_port, "right_port": right_port}
-        _server_instance = TeleoperationServer(backend_type=backend, backend_config=backend_config)
+            
+        _server_instance = TeleoperationServer(backend_type=backend, backend_config=backend_config, robot_config_path=robot_config)
         _server_instance.initialize()
         disable_video_env = os.getenv("TELEOP_DISABLE_VIDEO", "").lower()
         _server_instance.video_enabled = not (disable_video_env in ["1", "true", "yes"])
@@ -634,7 +660,7 @@ async def root():
     }
 
 
-def run_server(host: str = "0.0.0.0", port: int = 8000, backend_type: str = "mock", robot_port: Optional[str] = None, ssl_keyfile: Optional[str] = None, ssl_certfile: Optional[str] = None):
+def run_server(host: str = "0.0.0.0", port: int = 8000, backend_type: str = "mock", robot_port: Optional[str] = None, ssl_keyfile: Optional[str] = None, ssl_certfile: Optional[str] = None, robot_config: Optional[str] = None):
     """Run the FastAPI server"""
     # Force set backend type if environment variable is set
     import os
@@ -664,7 +690,11 @@ def run_server(host: str = "0.0.0.0", port: int = 8000, backend_type: str = "moc
          if env_port:
              backend_config['port'] = env_port
     
-    _server_instance = TeleoperationServer(backend_type=backend_type, backend_config=backend_config)
+    # Also check env for robot_config
+    if not robot_config:
+        robot_config = os.getenv("TELEOP_ROBOT_CONFIG")
+    
+    _server_instance = TeleoperationServer(backend_type=backend_type, backend_config=backend_config, robot_config_path=robot_config)
     # Don't initialize here, let the lifespan handler or get_server do it?
     # Actually, lifespan handler calls get_server() which initializes if None.
     # But here we manually create it.
@@ -686,9 +716,11 @@ if __name__ == "__main__":
     parser.add_argument("--robot-port", type=str, default=None, help="Robot serial port (e.g. /dev/ttyUSB0)")
     parser.add_argument("--ssl-keyfile", type=str, default=None, help="Path to TLS private key file")
     parser.add_argument("--ssl-certfile", type=str, default=None, help="Path to TLS certificate file")
+    parser.add_argument("--robot-config", type=str, default=None, help="Path to robot config YAML")
     
     args = parser.parse_args()
     
     ssl_keyfile = os.getenv("TELEOP_SSL_KEYFILE", args.ssl_keyfile)
     ssl_certfile = os.getenv("TELEOP_SSL_CERTFILE", args.ssl_certfile)
-    run_server(host=args.host, port=args.port, backend_type=args.backend, robot_port=args.robot_port, ssl_keyfile=ssl_keyfile, ssl_certfile=ssl_certfile)
+    robot_config = os.getenv("TELEOP_ROBOT_CONFIG", args.robot_config)
+    run_server(host=args.host, port=args.port, backend_type=args.backend, robot_port=args.robot_port, ssl_keyfile=ssl_keyfile, ssl_certfile=ssl_certfile, robot_config=robot_config)

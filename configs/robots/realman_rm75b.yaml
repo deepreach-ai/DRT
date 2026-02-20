@@ -1,0 +1,25 @@
+robot_name: "REALMAN_RM75B"
+dof: 7
+manufacturer: "REALMAN Robotics"
+
+isaac_sim:
+  usd_path: "assets/usd/realman_rm75b.usd"  # Placeholder, might not exist yet
+  urdf_path: "robots/rm75b/RM75-B.urdf"
+  ee_frame: "link_7"
+  prim_path: "/World/REALMAN_RM75B"
+
+real_robot:
+  backend_type: "realman_sdk"
+  connection:
+    ip: "192.168.1.100"
+    port: 8080
+
+# Workspace limits (meters) - approximate based on 750mm reach
+workspace_limits:
+  x: [-0.75, 0.75]
+  y: [-0.75, 0.75]
+  z: [0.0, 1.1]
+
+controller:
+  max_velocity: 0.5
+  control_rate_hz: 100

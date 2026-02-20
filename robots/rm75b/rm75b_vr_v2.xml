@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='utf-8'?>
 <mujoco model="realman_rm75b_v2">
-  <compiler angle="radian" meshdir="realman_75/meshes" autolimits="true" />
+  <compiler angle="radian" meshdir="meshes" autolimits="true" />
   <option timestep="0.002" integrator="implicit" impratio="2">
     <flag warmstart="enable" gravity="enable" />
   </option>

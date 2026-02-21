@@ -575,6 +575,28 @@
         if (!window.teleopClient) {
             window.teleopClient = new TeleopClient();
         }
+        
+        // Connect UI to client events
+        window.teleopClient.onStatus = (status) => {
+             const isConnected = status.robot_connected;
+             updateStatus('robot-status', isConnected ? 'Connected' : 'Disconnected', isConnected ? 'ok' : 'bad');
+             
+             // Check Safety Gate
+             const isSafetyActive = status.safety_gate_active;
+             updateStatus('safety-status', isSafetyActive ? 'Active' : 'Inactive', isSafetyActive ? 'ok' : 'bad');
+             
+             // If inactive, try to activate automatically if we are in VR
+             if (!isSafetyActive && state.inVR) {
+                 // Throttle activation attempts
+                 const now = Date.now();
+                 if (!state.lastSafetyActivation || now - state.lastSafetyActivation > 2000) {
+                     console.log('[VR] Auto-activating safety gate...');
+                     window.teleopClient.activateSafety();
+                     state.lastSafetyActivation = now;
+                 }
+             }
+        };
+
         window.teleopClient.setServerUrl(cleanUrl);
         window.teleopClient.setToken(token);
         window.teleopClient.connect();
@@ -856,11 +878,18 @@
 
         // Hide 2D UI
         ui2d.style.display = 'none';
-        canvas.style.display = 'block';
+        $('canvas-container').style.display = 'block';
         $('exit-overlay').style.display = 'block';
 
         // Initialize VR scene (without session)
+        // Pass null session, but we need to setup camera/renderer for window
         await initVRScene(null);
+        
+        // Force activate safety gate
+        if (window.teleopClient) {
+             console.log('[VR] Activating safety gate (Simulation)...');
+             window.teleopClient.activateSafety();
+        }
         
         // Start render loop manually since we don't have XRSession
         function animate() {
@@ -877,41 +906,39 @@
           return;
         }
         
-        if (!('xr' in navigator)) {
-          alert('WebXR not supported in this browser');
-          return;
+        // Check for XR support
+        if (!navigator.xr) {
+            alert('WebXR not supported in this browser. Use Simulated VR instead.');
+            return;
         }
         
         try {
           console.log('[VR] Requesting VR session...');
           
-          let session;
-          try {
-              // Try with local-floor (preferred)
-              session = await navigator.xr.requestSession('immersive-vr', {
-                requiredFeatures: ['local-floor'],
-                optionalFeatures: ['hand-tracking', 'layers']
-              });
-          } catch (e) {
-              console.warn('[VR] local-floor not supported, trying fallback...');
-              // Fallback to viewer or local if local-floor fails
-              session = await navigator.xr.requestSession('immersive-vr', {
-                requiredFeatures: ['viewer'], // Minimal requirement
-                optionalFeatures: ['local-floor', 'local', 'hand-tracking', 'layers']
-              });
-          }
+          // Request session with hand tracking and local-floor
+          const session = await navigator.xr.requestSession('immersive-vr', {
+              requiredFeatures: ['local-floor'],
+              optionalFeatures: ['hand-tracking']
+          });
           
           state.xrSession = session;
           state.inVR = true;
+          state.simulated = false;
           
           console.log('[VR] VR session started!');
           
           // Hide 2D UI
           ui2d.style.display = 'none';
-          canvas.style.display = 'block';
+          $('canvas-container').style.display = 'block';
           
           // Initialize VR scene
           await initVRScene(session);
+          
+          // Force activate safety gate
+          if (window.teleopClient) {
+              console.log('[VR] Activating safety gate (VR)...');
+              window.teleopClient.activateSafety();
+          }
           
           // Handle session end
           session.addEventListener('end', onVRSessionEnd);

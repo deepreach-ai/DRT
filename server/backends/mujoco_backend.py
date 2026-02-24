@@ -174,6 +174,7 @@ class MujocoRobotBackend(RobotBackend):
         orientation: np.ndarray,
         velocity_limit: float = 0.1,
         gripper_state: float = -1.0,
+        handedness: str = "right"
     ) -> bool:
         if not self.is_connected():
             return False

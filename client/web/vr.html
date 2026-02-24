@@ -878,7 +878,7 @@
 
         // Hide 2D UI
         ui2d.style.display = 'none';
-        $('canvas-container').style.display = 'block';
+        canvas.style.display = 'block';
         $('exit-overlay').style.display = 'block';
 
         // Initialize VR scene (without session)
@@ -929,7 +929,7 @@
           
           // Hide 2D UI
           ui2d.style.display = 'none';
-          $('canvas-container').style.display = 'block';
+          canvas.style.display = 'block';
           
           // Initialize VR scene
           await initVRScene(session);
@@ -1292,7 +1292,7 @@
       }, 100);
 
       function renderVRFrame(time, frame) {
-        if (!state.inVR) return;
+        if (!state.inVR || !VR_TO_ROBOT) return;
         
         // Update Video Textures from MJPEG streams
         updateVideoTextures();

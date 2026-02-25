@@ -417,7 +417,7 @@ class SOARMBackend(RobotBackend):
                     # If unreachable, do not return False immediately, 
                     # as this will stop the controller loop if treated as fatal error.
                     # Instead, just don't move and log.
-                    # print(f"[SOARMBackend] IK Unreachable: {position}")
+                    print(f"[SOARMBackend] IK Unreachable: {position}")
                     return True # Pretend success to keep loop alive
                 
                 # 3. Convert Radians to Degrees

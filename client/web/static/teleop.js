@@ -43,6 +43,7 @@ class TeleopClient {
         
         // Safety
         this.safetyActive = false;
+        this.safetyRetryInterval = null;
         
         // Key mappings
         this.keyMappings = {
@@ -294,12 +295,22 @@ class TeleopClient {
         }, interval);
         
         console.log(`Command loop started at ${this.sendFrequency} Hz`);
+
+        this.safetyRetryInterval = setInterval(() => {
+            if (!this.safetyActive) {
+                this.activateSafety();
+            }
+        }, 2000);
     }
-    
+
     stopCommandLoop() {
         if (this.sendInterval) {
             clearInterval(this.sendInterval);
             this.sendInterval = null;
+        }
+        if (this.safetyRetryInterval) {
+            clearInterval(this.safetyRetryInterval);
+            this.safetyRetryInterval = null;
         }
     }
     

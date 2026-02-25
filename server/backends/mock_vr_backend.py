@@ -51,9 +51,11 @@ class MockVRBackend(RobotBackend):
         self.status = BackendStatus.DISCONNECTED
         print(f"[MockVRBackend] ✓ Disconnected")
     
-    def send_target_pose(self, position: np.ndarray, 
+    def send_target_pose(self, position: np.ndarray,
                          orientation: np.ndarray,
-                         velocity_limit: float = 0.1) -> bool:
+                         velocity_limit: float = 0.1,
+                         gripper_state: float = -1.0,
+                         handedness: str = "right") -> bool:
         """Accept and simulate pose commands"""
         self.current_position = position.copy()
         self.current_orientation = orientation.copy()

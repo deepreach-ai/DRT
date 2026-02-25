@@ -308,10 +308,12 @@
           
           <p class="info-text">
             <strong>Controls in VR:</strong><br>
-            • Left/Right Grip: Control robot arms<br>
-            • Triggers: Open/close grippers<br>
-            • B Button: Emergency stop<br>
-            • Menu: Exit VR
+            • Grip (hold) + move hand: 6-DoF arm control<br>
+            • Joystick Y: arm up/down<br>
+            • Joystick X: wrist roll<br>
+            • Trigger: gripper open/close<br>
+            • Y button: re-sync tracking to robot position<br>
+            • B button (hold 1s): exit VR
           </p>
         </div>
       </div>
@@ -826,7 +828,9 @@
           for (const key in videoTextures) {
               const item = videoTextures[key];
               if (item && item.img && item.ctx && item.texture && state.videoStreams[key]) {
-                  if (item.img.complete && item.img.naturalWidth > 0) {
+                  // Note: img.complete is always false for MJPEG streams (response never "completes")
+                  // so we only check naturalWidth > 0, which is set after the first frame loads
+                  if (item.img.naturalWidth > 0) {
                       item.ctx.drawImage(item.img, 0, 0, item.canvas.width, item.canvas.height);
                       item.texture.needsUpdate = true;
                   }
@@ -1243,20 +1247,20 @@
           }
       }, 500);
 
-      // Matrix to transform from VR Frame (Y-up, -Z-fwd, X-right) 
+      // Matrix to transform from VR Frame (Y-up, -Z-fwd, X-right)
       // to Robot Frame (Z-up, X-fwd, Y-left)
       // X_rob = -Z_vr
-      // Y_rob = -X_vr
+      // Y_rob = +X_vr  (sign flipped vs original to match user's left/right perspective)
       // Z_rob = Y_vr
       let VR_TO_ROBOT, VR_TO_ROBOT_INV;
-      
+
       // Initialize matrices after THREE loads
       const initMatricesInterval = setInterval(() => {
           if (THREE) {
               clearInterval(initMatricesInterval);
               VR_TO_ROBOT = new THREE.Matrix4().set(
                  0,  0, -1,  0,
-                -1,  0,  0,  0,
+                 1,  0,  0,  0,
                  0,  1,  0,  0,
                  0,  0,  0,  1
               );
@@ -1354,28 +1358,26 @@
                 }
             } else {
                 // Joystick Control (When Clutch NOT pressed)
-                // Map Joystick Y to Z (Up/Down)
-                // Map Joystick X to Y (Left/Right)
-                // This is a simple fallback control
+                // joyY → Z (arm up/down)
+                // joyX → wrist_roll (twist end-effector)
                 if (Math.abs(joyX) > 0.1 || Math.abs(joyY) > 0.1) {
-                    dy = -joyX * 0.02; // Left/Right
-                    dz = -joyY * 0.02; // Up/Down
-                    // dx (Forward/Back) requires another axis or button modifier
+                    droll = joyX * 0.02;   // wrist_roll
+                    dz    = -joyY * 0.02;  // Up/Down
                 }
-                
+
                 state.controllers[handedness].lastPose = null;
-                // Don't reset dx, dy, dz if we just set them from joystick
                 if (Math.abs(joyX) <= 0.1 && Math.abs(joyY) <= 0.1) {
-                    dx = 0; dy = 0; dz = 0;
+                    droll = 0; dz = 0;
                 }
-                droll = 0; dpitch = 0; dyaw = 0;
+                dx = 0; dy = 0; dpitch = 0; dyaw = 0;
                 gripper = -1;
             }
             
             // 3. COMMON INPUTS
             if (buttons[0]) gripper = buttons[0].value;
 
-            // 4. SYSTEM CONTROLS (B Button - Exit)
+            // 4. SYSTEM CONTROLS
+            // B button (right, buttons[5]) — hold 1s to exit VR
             if (handedness === 'right' && buttons[5] && buttons[5].pressed) {
                 if (!state.exitTimer) state.exitTimer = Date.now();
                 else if (Date.now() - state.exitTimer > 1000) { exitVR(); state.exitTimer = null; }
@@ -1383,13 +1385,25 @@
                 state.exitTimer = null;
             }
 
+            // Y button (left, buttons[5]) — re-sync controller tracking to robot's actual position
+            if (handedness === 'left' && buttons[5] && buttons[5].pressed) {
+                if (!state.resyncTriggered) {
+                    state.resyncTriggered = true;
+                    fetch(`${state.serverUrl}/api/v1/controller/resync`, { method: 'POST' })
+                        .then(r => r.json())
+                        .then(d => console.log('[VR] Controller resynced to:', d.position))
+                        .catch(e => console.error('[VR] Resync failed:', e));
+                }
+            } else if (handedness === 'left') {
+                state.resyncTriggered = false;
+            }
+
             // Update Teleop Client with handedness
             // Send command if EITHER clutch is pressed OR joystick is moved
             const isJoystickActive = Math.abs(joyX) > 0.1 || Math.abs(joyY) > 0.1;
-            
+
             if (isClutchPressed || isJoystickActive) {
-                // Debug log when sending command
-                if (Math.random() < 0.05) console.log(`[VR] Sending motion: dy=${dy.toFixed(3)}, dz=${dz.toFixed(3)}`);
+                if (Math.random() < 0.05) console.log(`[VR] Sending motion: droll=${droll.toFixed(3)}, dz=${dz.toFixed(3)}`);
                 
                 window.teleopClient.accumulateVRMotion({ dx, dy, dz, droll, dpitch, dyaw }, handedness);
                 window.teleopClient.updateVRInput({ dx: 0, dy: 0, dz: 0, droll: 0, dpitch: 0, dyaw: 0, gripper, reference_frame: 'base' }, handedness);

@@ -45,32 +45,32 @@ For detailed installation and usage instructions, see the [Quick Start Guide](QU
 ```bash
 git clone https://github.com/deepreach-ai/DRT.git
 cd DRT
-pip install -r requirements.txt
+pip install -r server/requirements.txt
 ```
 
 ### 2. Start the Unified FastAPI Server
 Runs Web UI and API on a single port.
 ```bash
 # Mock backend (no hardware)
-python run_server.py --backend mock
+python3 run_server.py --backend mock
 
 # MuJoCo simulation (SO-101)
-python run_server.py --backend mujoco \
+python3 run_server.py --backend mujoco \
   --mujoco-xml robots/so101/so101.xml \
   --mujoco-ee gripperframe
 
 # MuJoCo simulation (RM75B VR-optimized)
-python run_server.py --backend mujoco \
+python3 run_server.py --backend mujoco \
   --mujoco-xml robots/rm75b/rm75b_vr_v2.xml \
   --mujoco-ee ee_site
 
 # MuJoCo simulation (SO-ARM101 VR-optimized)
-python run_server.py --backend mujoco \
+python3 run_server.py --backend mujoco \
   --mujoco-xml robots/so101/so101.xml \
   --mujoco-ee gripperframe
 
 # Isaac Sim backend
-python run_server.py --backend isaac
+python3 run_server.py --backend isaac
 ```
 
 ### 3. Open the Web Client
@@ -84,7 +84,7 @@ Login (default):
 
 ### 4. Server Health Check
 ```bash
-curl http://localhost:8000/api/v1/statistics | python -m json.tool
+curl http://localhost:8000/api/v1/statistics | python3 -m json.tool
 ```
 Expected fields include:
 - backend: mujoco/mock/isaac/soarm/so101_dual
@@ -97,7 +97,7 @@ Expected fields include:
 
 References:
 - Docs: [Keyboard Controls](docs/KEYBOARD_CONTROLS.md)
-- Python client: `python client/keyboard_client.py`
+- Python client: `python3 client/keyboard_client.py`
 
 ## 🥽 VR Teleoperation (Meta Quest 3)
 
@@ -130,7 +130,7 @@ http://localhost:8000/web/vr.html?urdf=so101
 Some headset/browser setups prefer HTTPS for WebXR:
 ```bash
 ./generate_cert.sh
-python run_server.py --backend soarm --soarm-port /dev/tty.usbmodemXXXX \
+python3 run_server.py --backend soarm --soarm-port /dev/tty.usbmodemXXXX \
   --port 8443 --ssl-key key.pem --ssl-cert cert.pem
 adb reverse tcp:8443 tcp:8443
 ```
@@ -145,7 +145,7 @@ Accept the self-signed certificate warning.
 export TELEOP_BACKEND=so101_dual
 export TELEOP_LEFT_PORT=/dev/tty.usbmodemLEFT
 export TELEOP_RIGHT_PORT=/dev/tty.usbmodemRIGHT
-python server/teleop_server.py --port 8000
+python3 server/teleop_server.py --port 8000
 ```
 Open:
 ```

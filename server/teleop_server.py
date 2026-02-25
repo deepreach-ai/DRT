@@ -138,13 +138,13 @@ class TeleoperationServer:
         # Send to robot backend (pass handedness)
         if self.backend and self.backend.is_connected():
             success = self.backend.send_target_pose(
-                target_position, 
+                target_position,
                 target_orientation,
                 velocity_limit=command.max_velocity,
                 gripper_state=gripper_state,
                 handedness=command.handedness
             )
-            
+
             if not success:
                 return {
                     'status': 'error',
@@ -152,6 +152,14 @@ class TeleoperationServer:
                     'safety_active': True,
                     'violations': violations
                 }
+
+            # Sync controller's virtual position to what the backend actually commanded
+            # (after step-clamping). This prevents integrator windup where the virtual
+            # position races ahead of the physical arm.
+            actual_pos = getattr(self.backend, 'actual_commanded_position', None)
+            actual_ori = getattr(self.backend, 'actual_commanded_orientation', None)
+            if actual_pos is not None and actual_ori is not None:
+                self.controller.set_current_pose(actual_pos, actual_ori, command.handedness)
         
         # Update statistics
         self.total_commands += 1
@@ -365,6 +373,19 @@ async def reset_controller():
     server = get_server()
     server.controller.reset()
     return {"status": "controller_reset"}
+
+
+@app.post("/api/v1/controller/resync")
+async def resync_controller():
+    """Re-sync controller's tracked position to the robot's actual FK position.
+    Call this (e.g. Y button in VR) when the virtual position has drifted from
+    reality. No physical movement — just resets the integration origin."""
+    server = get_server()
+    pos, ori = server.backend.get_current_pose()
+    if pos is not None and ori is not None:
+        server.controller.set_current_pose(pos, ori)
+        return {"status": "resynced", "position": pos.tolist()}
+    return {"status": "failed", "message": "Could not read current pose from backend"}
 
 
 @app.websocket("/ws/v1/teleop")

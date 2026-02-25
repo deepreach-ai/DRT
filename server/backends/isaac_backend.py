@@ -158,7 +158,7 @@ class IsaacSimBackend(RobotBackend):
         except Exception as e:
             print(f"[IsaacBackend] Message processing error: {e}")
 
-    def send_target_pose(self, position: np.ndarray, orientation: np.ndarray, velocity_limit: float = 0.1, gripper_state: float = -1.0) -> bool:
+    def send_target_pose(self, position: np.ndarray, orientation: np.ndarray, velocity_limit: float = 0.1, gripper_state: float = -1.0, handedness: str = "right") -> bool:
         if not self.is_connected() or not self.client_socket:
             return False
             

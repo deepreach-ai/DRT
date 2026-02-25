@@ -33,7 +33,13 @@ except ImportError:
 
 # Import LeRobot SO-101
 try:
-    from lerobot.robots.so101_follower import SO101Follower, SO101FollowerConfig
+    try:
+        # lerobot >= 0.4.4 reorganized robots into so_follower module
+        from lerobot.robots.so_follower.so_follower import SO101Follower, SO100Follower
+        from lerobot.robots.so_follower.config_so_follower import SOFollowerRobotConfig as SO101FollowerConfig
+    except ImportError:
+        # Older lerobot API
+        from lerobot.robots.so101_follower import SO101Follower, SO101FollowerConfig
     from lerobot.robots.robot import Robot
     from lerobot.motors.feetech import FeetechMotorsBus
     from lerobot.motors import Motor, MotorNormMode
@@ -258,25 +264,22 @@ class SOARMKinematics:
 class SOARMBackend(RobotBackend):
     """Backend for SO-ARM100/SO-101 robot using LeRobot Standard API"""
     
-    def __init__(self, port: str = "/dev/tty.usbmodem5B3E1224691", name: str = "so_arm"):
+    def __init__(self, port: str = "/dev/ttyACM1", name: str = "so_arm", robot_id: str = "deep_follower"):
         super().__init__(name)
-        # Allow overriding port via env var if not passed explicitly?
-        # Actually BackendFactory passes it from config or env.
-        # But if we use default arg, we might be stuck.
-        
-        # If passed port is default and env is set, use env?
-        # Better: let BackendFactory handle it.
-        # But here we see the backend is instantiated with port="/dev/tty.usbmodem5B3E1187881" from somewhere.
-        
         self.port = port
+        self.robot_id = robot_id
         self.robot = None
         self.current_position = np.array([0.0, 0.0, 0.0])  # Will be updated from robot
         self.current_orientation = np.array([1.0, 0.0, 0.0, 0.0])  # quat [w,x,y,z]
         self.command_count = 0
-        
+
         # Camera state
         self.cameras = {}
         self.camera_started = False
+
+        # Tracks the actual commanded EE position after step-clamping (for controller sync)
+        self.actual_commanded_position = None
+        self.actual_commanded_orientation = None
         
         if not LEROBOT_AVAILABLE:
             raise RuntimeError("LeRobot is not available. Please install it first.")
@@ -291,6 +294,7 @@ class SOARMBackend(RobotBackend):
             config = SO101FollowerConfig(
                 port=self.port,
                 use_degrees=True, # IMPORTANT: Use degrees for easier mapping
+                id=self.robot_id,  # Loads calibration from ~/.cache/huggingface/lerobot/calibration/robots/so_follower/{robot_id}.json
             )
             
             # Initialize robot
@@ -299,9 +303,6 @@ class SOARMBackend(RobotBackend):
             # Pass calibrate=False to avoid interactive prompts
             # If calibration is missing, this might be risky, but LeRobot usually has defaults
             self.robot.connect(calibrate=False)
-            
-            print(f"[SOARMBackend] Enabling motor torque...")
-            self.robot.bus.enable_torque()
             print(f"[SOARMBackend] ✓ Connected to SO-ARM")
 
             # 2. Connect to Cameras
@@ -330,7 +331,7 @@ class SOARMBackend(RobotBackend):
         roles = ["side_1", "side_2", "top"]
         found_count = 0
         
-        for i in range(1, 10):
+        for i in range(0, 10):
             if found_count >= len(roles): break
             try:
                 cap = cv2.VideoCapture(i)
@@ -338,7 +339,7 @@ class SOARMBackend(RobotBackend):
                     ret, _ = cap.read()
                     if ret:
                         role = roles[found_count]
-                        self.cameras[role] = {'type': 'opencv', 'obj': cap}
+                        self.cameras[role] = {'type': 'opencv', 'obj': cap, 'index': i}
                         print(f"[SOARMBackend] ✓ Found {role} at ID {i}")
                         found_count += 1
                     else:
@@ -416,7 +417,7 @@ class SOARMBackend(RobotBackend):
                     # If unreachable, do not return False immediately, 
                     # as this will stop the controller loop if treated as fatal error.
                     # Instead, just don't move and log.
-                    # print(f"[SOARMBackend] IK Unreachable: {position}")
+                    print(f"[SOARMBackend] IK Unreachable: {position}")
                     return True # Pretend success to keep loop alive
                 
                 # 3. Convert Radians to Degrees
@@ -488,19 +489,24 @@ class SOARMBackend(RobotBackend):
                     final_command["gripper"] = g_val
                 
                 # 6. Send Command
-                # Debug log for command
-                # print(f"[SOARMBackend] Moving to: {final_command}")
-                
                 # Check for NaNs
                 for k, v in final_command.items():
                     if not np.isfinite(v):
                         print(f"[SOARMBackend] ⚠️ NaN in command for {k}! Ignoring.")
                         return True
-                
+
                 self.robot.bus.sync_write("Goal_Position", final_command)
-                
-                self.current_position = position
-                self.current_orientation = orientation
+
+                # 7. Compute FK from the actual clamped angles so the controller
+                #    can sync its virtual position — prevents integrator windup.
+                final_joints_deg = np.array([final_command.get(n, 0.0) for n in names])
+                final_joints_rad = np.radians(final_joints_deg)
+                fk_pos, fk_ori = SOARMKinematics.forward_kinematics(final_joints_rad)
+                self.actual_commanded_position = fk_pos
+                self.actual_commanded_orientation = fk_ori
+
+                self.current_position = fk_pos
+                self.current_orientation = fk_ori
                 self.command_count += 1
                 self.last_update_time = time.time()
                 return True
@@ -590,25 +596,67 @@ class SOARMBackend(RobotBackend):
         # Extract values
         return np.array([obs.get(k, 0.0) for k in sorted(obs.keys())])
         
-    def render(self, width: int = 960, height: int = 540) -> Optional[bytes]:
-        # Same render logic as before
+    def _read_camera(self, cam: dict) -> Optional[np.ndarray]:
+        """Read a frame from a camera, attempting reconnect on failure."""
+        if cam['type'] != 'opencv':
+            return None
+        ret, frame = cam['obj'].read()
+        if not ret:
+            # Camera dropped — try to reopen at the same device index
+            try:
+                cam['obj'].release()
+                new_cap = cv2.VideoCapture(cam['index'])
+                if new_cap.isOpened():
+                    cam['obj'] = new_cap
+                    ret, frame = new_cap.read()
+                    if ret:
+                        print(f"[SOARMBackend] Reconnected camera at index {cam['index']}")
+            except Exception:
+                pass
+        return frame if ret else None
+
+    def render(self, width: int = 960, height: int = 540, camera: str = None) -> Optional[bytes]:
+        """
+        Render camera frames.
+        If camera='left'|'right'|'depth', return that individual camera only.
+        If camera=None, return all cameras stitched side-by-side.
+        """
         if not self.camera_started or not self.cameras:
             return None
+
+        # Map VR endpoint names to internal camera roles
+        CAMERA_MAP = {'left': 'side_1', 'right': 'side_2', 'depth': 'top'}
+
         try:
+            if camera is not None:
+                # Single-camera mode: return one frame resized to (width, height)
+                role = CAMERA_MAP.get(camera, camera)
+                cam = self.cameras.get(role)
+                if cam is None:
+                    return None
+                frame = self._read_camera(cam)
+                if frame is None:
+                    return None
+                frame = cv2.resize(frame, (width, height))
+                _, jpeg = cv2.imencode('.jpg', frame)
+                return jpeg.tobytes()
+
+            # Stitched mode: read all cameras and place side-by-side
             frames = {}
             for name, cam in self.cameras.items():
-                if cam['type'] == 'opencv':
-                    ret, frame = cam['obj'].read()
-                    if ret: frames[name] = frame
-            
-            if not frames: return None
-            
-            # Simple stitching
+                frame = self._read_camera(cam)
+                if frame is not None:
+                    frames[name] = frame
+
+            if not frames:
+                return None
+
             canvas = np.zeros((height, width, 3), dtype=np.uint8)
             slot_width = width // 3
-            
+
             def place(img, idx):
-                if img is None: return
+                if img is None:
+                    return
                 h, w = img.shape[:2]
                 scale = slot_width / w
                 new_h = int(h * scale)
@@ -616,17 +664,17 @@ class SOARMBackend(RobotBackend):
                 y = (height - new_h) // 2
                 x = idx * slot_width
                 if y < 0:
-                    resized = resized[-y:-y+height, :]
+                    resized = resized[-y:-y + height, :]
                     y = 0
-                canvas[y:y+resized.shape[0], x:x+slot_width] = resized
+                canvas[y:y + resized.shape[0], x:x + slot_width] = resized
 
             place(frames.get('side_1'), 0)
             place(frames.get('top'), 1)
             place(frames.get('side_2'), 2)
-            
+
             _, jpeg = cv2.imencode('.jpg', canvas)
             return jpeg.tobytes()
-        except:
+        except Exception:
             return None
 
     def get_status(self) -> Dict[str, Any]:

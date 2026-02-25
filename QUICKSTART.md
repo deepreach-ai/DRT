@@ -14,7 +14,7 @@ Welcome to DRT (Distributed Robot Teleoperation). This guide helps you quickly r
 ```bash
 git clone https://github.com/deepreach-ai/DRT.git
 cd DRT
-pip install -r requirements.txt
+pip install -r server/requirements.txt
 ```
 
 ---
@@ -24,19 +24,19 @@ FastAPI server provides both Web UI and REST APIs.
 
 ### Mock backend (no hardware/sim required)
 ```bash
-python run_server.py --backend mock
+python3 run_server.py --backend mock
 ```
 
 ### MuJoCo simulation (SO-101 example)
 ```bash
-python run_server.py --backend mujoco \
+python3 run_server.py --backend mujoco \
   --mujoco-xml robots/so101/so101.xml \
   --mujoco-ee gripperframe
 ```
 
 ### Isaac backend
 ```bash
-python run_server.py --backend isaac
+python3 run_server.py --backend isaac
 ```
 
 ---
@@ -55,7 +55,7 @@ Tip: Leave Base URL empty, or set to `http://localhost:8000`.
 
 ## 4. Quick API Verification
 ```bash
-curl http://localhost:8000/api/v1/statistics | python -m json.tool
+curl http://localhost:8000/api/v1/statistics | python3 -m json.tool
 ```
 Output should include:
 - backend: mujoco/mock/isaac
@@ -72,7 +72,7 @@ References:
 - Docs: [Keyboard Controls](docs/KEYBOARD_CONTROLS.md)
 - Python client:
 ```bash
-python client/keyboard_client.py
+python3 client/keyboard_client.py
 ```
 
 ---
@@ -86,7 +86,7 @@ python client/keyboard_client.py
 
 ## 7. Real Robot (SO-ARM101 example)
 ```bash
-python run_server.py --backend soarm --soarm-port /dev/ttyUSB0
+python3 run_server.py --backend soarm --soarm-port /dev/ttyUSB0
 ```
 More setup and deployment: [SOARM_SETUP](docs/SOARM_SETUP.md), [SOARM_DEPLOYMENT_GUIDE](docs/SOARM_DEPLOYMENT_GUIDE.md)
 

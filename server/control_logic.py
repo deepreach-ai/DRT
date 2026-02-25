@@ -21,14 +21,16 @@ class TeleoperationController:
         self.workspace = workspace_limits or WorkspaceLimits()
         self.velocity_limiter = velocity_limiter or VelocityLimiter()
         
-        # State for both hands
+        # State for both hands.
+        # These are fallback positions only — overridden at startup by set_current_pose()
+        # from the robot's actual FK. Chosen so wrist_flex stays within SO-101 range (~-107° to 65°).
         self.poses = {
             "left": {
-                "position": np.array([-0.2, 0.0, 0.2]), # Initial offset for left arm
+                "position": np.array([-0.15, 0.0, 0.38]),
                 "orientation": np.array([1.0, 0.0, 0.0, 0.0])
             },
             "right": {
-                "position": np.array([0.2, 0.0, 0.2]),  # Initial offset for right arm
+                "position": np.array([0.15, 0.0, 0.38]),
                 "orientation": np.array([1.0, 0.0, 0.0, 0.0])
             }
         }

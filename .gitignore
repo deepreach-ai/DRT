@@ -14,6 +14,14 @@ __pycache__/
 # Logs
 *.log
 
+# Secrets / local dev TLS
+certs/
+*.key
+*.crt
+
+# ngrok local config
+ngrok.yml
+
 # Internal Documents
 .trae/documents
 server/recordings/

@@ -324,99 +324,91 @@ class TeleopClient {
     accumulateVRMotion(delta, handedness = "right") {
         const h = handedness.toLowerCase();
         if (this.vrAccumulator[h]) {
-            this.vrAccumulator[h].dx += delta.dx || 0;
-            this.vrAccumulator[h].dy += delta.dy || 0;
-            this.vrAccumulator[h].dz += delta.dz || 0;
-            this.vrAccumulator[h].droll += delta.droll || 0;
-            this.vrAccumulator[h].dpitch += delta.dpitch || 0;
-            this.vrAccumulator[h].dyaw += delta.dyaw || 0;
+            // Use Number() not || 0: falsy-OR treats 0.0 (joystick at center) as missing
+            this.vrAccumulator[h].dx     += typeof delta.dx     === 'number' ? delta.dx     : 0;
+            this.vrAccumulator[h].dy     += typeof delta.dy     === 'number' ? delta.dy     : 0;
+            this.vrAccumulator[h].dz     += typeof delta.dz     === 'number' ? delta.dz     : 0;
+            this.vrAccumulator[h].droll  += typeof delta.droll  === 'number' ? delta.droll  : 0;
+            this.vrAccumulator[h].dpitch += typeof delta.dpitch === 'number' ? delta.dpitch : 0;
+            this.vrAccumulator[h].dyaw   += typeof delta.dyaw   === 'number' ? delta.dyaw   : 0;
         }
     }
 
     sendCommand() {
         if (!this.connected || !this.ws) return;
         
-        // Send commands for both hands
-        ["left", "right"].forEach(handedness => {
-            const vrIn = this.vrInput[handedness];
-            const vrAcc = this.vrAccumulator[handedness];
+        // Only send for right hand (single-arm RM75-B setup).
+        // Left hand was sending its own zero-motion heartbeats every 20ms, which were
+        // overwriting the right-hand motion commands in the server's controller since
+        // both use the same single-robot backend. This caused motion to be immediately
+        // cancelled by the left-hand zero-delta heartbeat.
+        const handedness = "right";
+        const vrIn = this.vrInput[handedness];
+        const vrAcc = this.vrAccumulator[handedness];
 
-            // Build command
-            const command = {
-                dx: 0, dy: 0, dz: 0,
-                droll: 0, dpitch: 0, dyaw: 0,
-                reference_frame: vrIn.reference_frame || 'end_effector',
-                max_velocity: 0.5,
-                max_angular_velocity: 1.0,
-                timestamp: Date.now() / 1000,
-                client_id: 'web_client',
-                handedness: handedness
-            };
-            
-            // Only apply keyboard keys to the primary hand (right) for simplicity
-            if (handedness === "right") {
-                this.activeKeys.forEach(key => {
-                    const mapping = this.keyMappings[key];
-                    if (!mapping) return;
-                    
-                    const axis = mapping.axis;
-                    const value = mapping.value;
-                    
-                    const isPosition = ['dx', 'dy', 'dz'].includes(axis);
-                    const isOrientation = ['droll', 'dpitch', 'dyaw'].includes(axis);
-                    
-                    if (this.controlMode === 'position' && isPosition) {
-                        command[axis] += value * this.positionIncrement;
-                    } else if (this.controlMode === 'orientation' && isOrientation) {
-                        command[axis] += value * this.orientationIncrement;
-                    }
-                });
-            }
-
-            // Add VR Input (Rate based)
-            command.dx += vrIn.dx;
-            command.dy += vrIn.dy;
-            command.dz += vrIn.dz;
-            command.droll += vrIn.droll;
-            command.dpitch += vrIn.dpitch;
-            command.dyaw += vrIn.dyaw;
-            
-            // Add VR Motion (Accumulated delta)
-            command.dx += vrAcc.dx;
-            command.dy += vrAcc.dy;
-            command.dz += vrAcc.dz;
-            command.droll += vrAcc.droll;
-            command.dpitch += vrAcc.dpitch;
-            command.dyaw += vrAcc.dyaw;
-
-            // Reset accumulator for this hand
-            this.vrAccumulator[handedness] = {
-                dx: 0, dy: 0, dz: 0,
-                droll: 0, dpitch: 0, dyaw: 0
-            };
-
-            if (vrIn.gripper >= 0) {
-                command.gripper_state = vrIn.gripper;
-            }
-            
-            // Only send if there's significant movement or it's the primary hand heartbeat
-            const hasMotion = Math.abs(command.dx) > 0.0001 || Math.abs(command.dy) > 0.0001 || 
-                              Math.abs(command.dz) > 0.0001 || Math.abs(command.droll) > 0.0001 ||
-                              Math.abs(command.dpitch) > 0.0001 || Math.abs(command.dyaw) > 0.0001 ||
-                              command.gripper_state !== undefined;
-
-            // Always send if has motion, otherwise just heartbeat for right hand
-            if (hasMotion || handedness === "right") {
-                try {
-                    this.lastCommandTime = Date.now();
-                    this.ws.send(JSON.stringify(command));
-                    this.commandCount++;
-                } catch (error) {
-                    console.error(`Failed to send ${handedness} command:`, error);
-                }
+        // Build command - reference_frame comes from vr.html (set per-mode)
+        const command = {
+            dx: 0, dy: 0, dz: 0,
+            droll: 0, dpitch: 0, dyaw: 0,
+            gripper_state: -1,  // -1 = don't change gripper
+            reference_frame: vrIn.reference_frame || 'end_effector',
+            max_velocity: 0.5,
+            max_angular_velocity: 1.0,
+            timestamp: Date.now() / 1000,
+            client_id: 'web_client',
+            handedness: handedness
+        };
+        
+        // Keyboard controls (position/orientation mode)
+        this.activeKeys.forEach(key => {
+            const mapping = this.keyMappings[key];
+            if (!mapping) return;
+            const axis = mapping.axis;
+            const value = mapping.value;
+            const isPosition = ['dx', 'dy', 'dz'].includes(axis);
+            const isOrientation = ['droll', 'dpitch', 'dyaw'].includes(axis);
+            if (this.controlMode === 'position' && isPosition) {
+                command[axis] += value * this.positionIncrement;
+            } else if (this.controlMode === 'orientation' && isOrientation) {
+                command[axis] += value * this.orientationIncrement;
             }
         });
 
+        // Add accumulated VR motion (clutch drag & joystick deltas)
+        command.dx     += vrAcc.dx;
+        command.dy     += vrAcc.dy;
+        command.dz     += vrAcc.dz;
+        command.droll  += vrAcc.droll;
+        command.dpitch += vrAcc.dpitch;
+        command.dyaw   += vrAcc.dyaw;
+
+        // Reset accumulator after draining
+        this.vrAccumulator[handedness] = { dx:0, dy:0, dz:0, droll:0, dpitch:0, dyaw:0 };
+
+        // Gripper state from VR trigger
+        if (typeof vrIn.gripper === 'number' && vrIn.gripper >= 0) {
+            command.gripper_state = vrIn.gripper;
+        }
+        
+        const hasMotion = Math.abs(command.dx)     > 0.0001 ||
+                          Math.abs(command.dy)     > 0.0001 ||
+                          Math.abs(command.dz)     > 0.0001 ||
+                          Math.abs(command.droll)  > 0.0001 ||
+                          Math.abs(command.dpitch) > 0.0001 ||
+                          Math.abs(command.dyaw)   > 0.0001;
+
+        // Send whenever there's motion; send heartbeat every 10th tick even if idle
+        // so the server knows the client is alive without spamming zero-delta IK calls.
+        this._heartbeatTick = ((this._heartbeatTick || 0) + 1) % 10;
+        if (hasMotion || this._heartbeatTick === 0) {
+            try {
+                this.lastCommandTime = Date.now();
+                this.ws.send(JSON.stringify(command));
+                this.commandCount++;
+            } catch (error) {
+                console.error('Failed to send command:', error);
+            }
+        }
         if (this.commandCountEl) {
             this.commandCountEl.textContent = this.commandCount;
         }

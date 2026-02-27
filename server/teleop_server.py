@@ -88,13 +88,16 @@ class TeleoperationServer:
         if not self.backend.connect():
             raise RuntimeError(f"Failed to connect to {self.backend_type} backend")
         
-        # Sync initial pose
+        # Sync initial pose — both hands start at the robot's actual FK position
         initial_pos, initial_ori = self.backend.get_current_pose()
         if initial_pos is not None and initial_ori is not None:
             print(f"[Server] Syncing controller to initial pose: {initial_pos}")
-            self.controller.set_current_pose(initial_pos, initial_ori)
+            self.controller.set_current_pose(initial_pos, initial_ori, handedness="right")
+            self.controller.set_current_pose(initial_pos, initial_ori, handedness="left")
         else:
             print("[Server] ⚠️ Could not get initial pose from backend. Controller starting at [0,0,0]")
+        print(f"[Server] Controller right pose: {self.controller.poses['right']['position']}")
+        print(f"[Server] Controller left  pose: {self.controller.poses['left']['position']}")
 
         print(f"[Server] Initialized successfully with {self.backend_type} backend")
         
@@ -125,13 +128,15 @@ class TeleoperationServer:
         if time.time() - command.timestamp > 1.0:
             pass
             
-        # FOR DIAGNOSIS: Force active to allow testing "little moves"
         safety_active = True
-        
-        if not safety_active:
-            # ... (omitting debug logs for brevity)
-            return {'status': 'ignored', 'message': 'Safety gate not active'}
-        
+
+        # Diagnostic log: print every 50th command so we can confirm signal is arriving
+        if self.total_commands % 50 == 0:
+            has_motion = any(abs(v) > 1e-5 for v in [command.dx, command.dy, command.dz,
+                                                      command.droll, command.dpitch, command.dyaw])
+            print(f"[Server] cmd #{self.total_commands} hand={command.handedness} "
+                  f"dz={command.dz:.4f} droll={command.droll:.4f} "
+                  f"frame={command.reference_frame} motion={has_motion}")
         # Process command through controller (pass handedness)
         target_position, target_orientation, gripper_state, violations = self.controller.process_command(command)
         
@@ -153,13 +158,19 @@ class TeleoperationServer:
                     'violations': violations
                 }
 
-            # Sync controller's virtual position to what the backend actually commanded
-            # (after step-clamping). This prevents integrator windup where the virtual
-            # position races ahead of the physical arm.
-            actual_pos = getattr(self.backend, 'actual_commanded_position', None)
-            actual_ori = getattr(self.backend, 'actual_commanded_orientation', None)
-            if actual_pos is not None and actual_ori is not None:
-                self.controller.set_current_pose(actual_pos, actual_ori, command.handedness)
+            # Sync controller back to actual EE position ONLY when the command had
+            # real motion. For zero-delta heartbeats, don't resync — the physics
+            # sim keeps drifting slightly due to PD settling, and resyncing on every
+            # heartbeat would cancel any accumulated motion from the previous tick.
+            has_motion = any(abs(v) > 1e-6 for v in [
+                command.dx, command.dy, command.dz,
+                command.droll, command.dpitch, command.dyaw
+            ])
+            if has_motion:
+                actual_pos = getattr(self.backend, 'actual_commanded_position', None)
+                actual_ori = getattr(self.backend, 'actual_commanded_orientation', None)
+                if actual_pos is not None and actual_ori is not None:
+                    self.controller.set_current_pose(actual_pos, actual_ori, command.handedness)
         
         # Update statistics
         self.total_commands += 1

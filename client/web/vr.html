@@ -597,7 +597,21 @@
         vrSection.classList.remove('hidden');
 
         if (autoSim) {
-            setTimeout(() => enterSimulatedVR(), 50);
+            const maybeAutoSim = async () => {
+                try {
+                    if (window.isSecureContext && navigator.xr && navigator.xr.isSessionSupported) {
+                        const supported = await navigator.xr.isSessionSupported('immersive-vr');
+                        if (supported) {
+                            console.log('[VR] autosim=1 requested but immersive-vr is supported; skipping auto simulated mode');
+                            return;
+                        }
+                    }
+                } catch (e) {
+                    console.warn('[VR] autosim support check failed, falling back to simulated mode:', e);
+                }
+                setTimeout(() => enterSimulatedVR(), 50);
+            };
+            maybeAutoSim();
         }
       }
 
@@ -880,6 +894,8 @@
           alert('Please connect to server first');
           return;
         }
+
+        state.simulated = false;
         
         if (!('xr' in navigator)) {
           alert('WebXR not supported in this browser');
@@ -913,6 +929,7 @@
           // Hide 2D UI
           ui2d.style.display = 'none';
           canvas.style.display = 'block';
+          $('exit-overlay').style.display = 'block';
           
           // Initialize VR scene
           await initVRScene(session);
@@ -922,6 +939,16 @@
           
         } catch (err) {
           console.error('[VR] Failed to enter VR:', err);
+          try {
+              if (state.xrSession) {
+                  await state.xrSession.end();
+              }
+          } catch (e) {
+              console.warn('[VR] Failed to clean up XRSession after enterVR error:', e);
+          }
+          state.inVR = false;
+          state.xrSession = null;
+          state.simulated = false;
           alert('Failed to enter VR: ' + err.message);
         }
       }
@@ -1075,8 +1102,9 @@
       let ghostRobot = null;
       async function loadRobotModel() {
           const params = new URLSearchParams(window.location.search);
-          const urdfFile = params.get('urdf') || 'rm65/rm65_w_gripper'; // Default
+          const urdfFile = params.get('urdf') || 'rm75b/rm75b_w_gripper';
           const urdfPath = `/assets/robots/${urdfFile}.urdf`;
+          const showGhost = params.get('ghost') === '1';
           
           console.log(`[VR] Loading robot model: ${urdfFile}`);
           console.log(`[VR] URDF Path: ${urdfPath}`);
@@ -1102,16 +1130,33 @@
           
           const manager = new THREE.LoadingManager();
           const loader = new URDFLoader(manager);
-          
-          loader.packages = {
-             'crt_ctag2f90d_gripper_visualization': '/assets/crt_ctag2f90d_gripper_visualization', // Use absolute path to be safe
-             'realman_75': '/assets/robots/rm75b',
-             // Add mappings for RM75B base meshes if they use package://rm75_description or similar
-             'rm75_description': '/assets/robots/rm75b',
-             'realman_description': '/assets/robots/rm75b',
-             // Add mappings for RM75-B (used in rm75b_w_gripper.urdf)
-             'RM75-B': '/assets/robots/rm75b'
-          };
+
+          const baseRobotDir = urdfFile.includes('/') ? urdfFile.split('/')[0] : urdfFile;
+          const baseRobotAssets = `/assets/robots/${baseRobotDir}`;
+          const packages = {};
+          packages['crt_ctag2f90d_gripper_visualization'] = '/assets/crt_ctag2f90d_gripper_visualization';
+          try {
+              const urdfRes = await fetch(urdfPath);
+              if (urdfRes.ok) {
+                  const urdfText = await urdfRes.text();
+                  const re = /package:\/\/([^/\s]+)\//g;
+                  const seen = new Set();
+                  let m;
+                  while ((m = re.exec(urdfText)) !== null) {
+                      const pkg = m[1];
+                      if (!pkg || pkg === 'crt_ctag2f90d_gripper_visualization') continue;
+                      if (seen.has(pkg)) continue;
+                      seen.add(pkg);
+                      packages[pkg] = baseRobotAssets;
+                  }
+              } else {
+                  console.warn('[VR] Failed to fetch URDF for package discovery:', urdfRes.status, urdfRes.statusText);
+              }
+          } catch (e) {
+              console.warn('[VR] URDF package discovery failed:', e);
+          }
+
+          loader.packages = packages;
           
           // Debugging
           console.log('[VR] URDF loader created. Packages:', loader.packages);
@@ -1187,24 +1232,30 @@
               state.robot.rotation.x = -Math.PI / 2;
               scene.add(state.robot);
               
-              // 2. Load Ghost Robot (Target state/Trajectory)
-              loader.load(urdfPath, ghost => {
-                  ghostRobot = ghost;
-                  ghostRobot.position.set(0, 0.8, -0.8);
-                  ghostRobot.rotation.x = -Math.PI / 2;
-                  
-                  // Make semi-transparent
-                  ghostRobot.traverse(c => {
-                      if (c.isMesh) {
-                          c.material = c.material.clone();
-                          c.material.transparent = true;
-                          c.material.opacity = 0.3;
-                          c.material.color.setHex(0x4f8cff); // Accent color for target
-                      }
+              if (ghostRobot) {
+                  scene.remove(ghostRobot);
+                  ghostRobot = null;
+              }
+
+              if (showGhost) {
+                  loader.load(urdfPath, ghost => {
+                      ghostRobot = ghost;
+                      ghostRobot.position.set(0, 0.8, -0.8);
+                      ghostRobot.rotation.x = -Math.PI / 2;
+                      
+                      ghostRobot.traverse(c => {
+                          if (c.isMesh) {
+                              c.material = c.material.clone();
+                              c.material.transparent = true;
+                              c.material.opacity = 0.3;
+                              c.material.color.setHex(0x4f8cff);
+                          }
+                      });
+                      ghostRobot.visible = false;
+                      scene.add(ghostRobot);
+                      console.log('[VR] Ghost robot loaded');
                   });
-                  scene.add(ghostRobot);
-                  console.log('[VR] Ghost robot loaded');
-              });
+              }
               
               // Add a table
               const tableGeom = new THREE.BoxGeometry(1, 0.8, 1);
@@ -1219,18 +1270,24 @@
           const model = isTarget ? ghostRobot : state.robot;
           if (!model || !joints) return;
           
-          let jointNames = [];
-          if (model.name.includes('RM75-B')) {
-              jointNames = ['joint_1', 'joint_2', 'joint_3', 'joint_4', 'joint_5', 'joint_6', 'joint_7', 'Left_1_Joint', 'Left_Support_Joint', 'Left_2_Joint', 'Right_2_Joint', 'Right_1_Joint', 'Right_Support_Joint'];
-          } else if (model.name.includes('dual')) {
-              jointNames = ['left_shoulder_pan', 'left_shoulder_lift', 'left_elbow_flex', 'left_wrist_flex', 'left_wrist_roll', 'left_gripper', 'right_shoulder_pan', 'right_shoulder_lift', 'right_elbow_flex', 'right_wrist_flex', 'right_wrist_roll', 'right_gripper'];
-          } else {
-              jointNames = ['shoulder_pan', 'shoulder_lift', 'elbow_flex', 'wrist_flex', 'wrist_roll', 'gripper'];
+          if (!model.joints) return;
+
+          const armJointNames = [];
+          for (let i = 1; i <= 7; i++) {
+              const name = `joint_${i}`;
+              if (model.joints[name]) armJointNames.push(name);
           }
-          
-          for (let i = 0; i < jointNames.length; i++) {
-              if (i >= joints.length) break;
-              const name = jointNames[i];
+
+          if (armJointNames.length > 0) {
+              for (let i = 0; i < armJointNames.length && i < joints.length; i++) {
+                  model.joints[armJointNames[i]].setJointValue(joints[i]);
+              }
+              return;
+          }
+
+          const fallback = ['shoulder_pan', 'shoulder_lift', 'elbow_flex', 'wrist_flex', 'wrist_roll', 'gripper'];
+          for (let i = 0; i < fallback.length && i < joints.length; i++) {
+              const name = fallback[i];
               if (model.joints[name]) model.joints[name].setJointValue(joints[i]);
           }
       }
@@ -1242,15 +1299,20 @@
               window.teleopClient.onStateUpdate = (robotState) => {
                   if (robotState.joints) updateRobotJoints(robotState.joints, false);
                   // Optional: if server sends target joints, update ghost
-                  if (robotState.target_joints) updateRobotJoints(robotState.target_joints, true);
+                  if (ghostRobot && robotState.target_joints && robotState.target_joints.length > 0) {
+                      ghostRobot.visible = true;
+                      updateRobotJoints(robotState.target_joints, true);
+                  } else if (ghostRobot) {
+                      ghostRobot.visible = false;
+                  }
               };
           }
       }, 500);
 
       // Matrix to transform from VR Frame (Y-up, -Z-fwd, X-right)
       // to Robot Frame (Z-up, X-fwd, Y-left)
-      // X_rob = -Z_vr
-      // Y_rob = +X_vr  (sign flipped vs original to match user's left/right perspective)
+      // X_rob = +Z_vr
+      // Y_rob = +X_vr
       // Z_rob = Y_vr
       let VR_TO_ROBOT, VR_TO_ROBOT_INV;
 
@@ -1259,7 +1321,7 @@
           if (THREE) {
               clearInterval(initMatricesInterval);
               VR_TO_ROBOT = new THREE.Matrix4().set(
-                 0,  0, -1,  0,
+                 0,  0,  1,  0,
                  1,  0,  0,  0,
                  0,  1,  0,  0,
                  0,  0,  0,  1
@@ -1275,13 +1337,16 @@
         updateVideoTextures();
 
         if (state.simulated) {
-             // Simulate Input (e.g. use mouse/keyboard to simulate joystick?)
-             // For now, just render scene
+             pollSimulatedGamepad();
              renderer.render(scene, camera);
              return;
         }
 
-        if (!frame) return;
+        // In true WebXR mode, frame must exist
+        if (!frame) {
+            renderer.render(scene, camera);
+            return;
+        }
         
         // Handle Controller Input
         const session = frame.session;
@@ -1290,35 +1355,55 @@
         // Initialize state for tracking if not exists
         if (!state.controllers) state.controllers = { left: { lastPose: null }, right: { lastPose: null } };
 
+        // Debug: log controller count every 5 seconds
+        if (!state._ctrlLogTime || Date.now() - state._ctrlLogTime > 5000) {
+            state._ctrlLogTime = Date.now();
+            const sources = [...session.inputSources];
+            console.log(`[VR] InputSources: ${sources.length} | ` +
+                sources.map(s => `${s.handedness}(gp=${!!s.gamepad})`).join(', '));
+        }
+
         for (const inputSource of session.inputSources) {
-            const handedness = inputSource.handedness; // 'left' or 'right'
+            const handedness = inputSource.handedness;
             if (handedness !== 'left' && handedness !== 'right') continue;
-            
+
             const gp = inputSource.gamepad;
             if (!gp || !window.teleopClient) continue;
             
             const buttons = gp.buttons;
             const axes = gp.axes;
             
-            // DEBUG: Log controller input
-            if (handedness === 'right' && (axes[2] !== 0 || axes[3] !== 0 || buttons[1].pressed)) {
-                // Throttle log to avoid spam
-                if (Math.random() < 0.05) {
-                    console.log(`[VR] Right Ctrl: Grip=${buttons[1].pressed}, Axes=[${axes.map(a => a.toFixed(2)).join(',')}]`);
-                }
-            }
-            
+            // --- Quest controller gamepad layout (W3C standard mapping) ---
+            // axes[0], axes[1] = touchpad/thumbstick X/Y (index 0,1 — used by SOME browsers)
+            // axes[2], axes[3] = thumbstick X/Y (index 2,3 — used by Meta Browser on Quest)
+            // Both left and right controllers share this same axes[] layout.
+            // We prefer axes[2]/[3] (thumbstick) over axes[0]/[1] (touchpad fallback).
+            // IMPORTANT: Use Number(x) || 0 instead of x || 0 to avoid masking real 0 values
+            // when the joystick rests near center but not exactly 0.
+            //
+            // Only process joystick from the RIGHT controller for arm motion.
+            // Left controller joystick is reserved for future use (locomotion, etc.).
+
             let dx = 0, dy = 0, dz = 0;
             let droll = 0, dpitch = 0, dyaw = 0;
             let gripper = -1;
 
             // 1. CLUTCH & 6-DoF
             const isClutchPressed = buttons[1] && buttons[1].pressed;
-            // Joystick Axes: axes[2] is X (left/right), axes[3] is Y (up/down)
-            // Note: Standard mapping is 2,3 for joystick, but sometimes 0,1 if no touchpad
-            // Let's try both mapping just in case
-            const joyX = axes[2] || axes[0] || 0;
-            const joyY = axes[3] || axes[1] || 0;
+
+            // Robust axis read: prefer axes[2]/[3] (Quest thumbstick), fall back to axes[0]/[1]
+            // Use parseFloat to ensure numeric type, not falsy-JS-OR
+            const rawJoyX = (axes.length > 2) ? axes[2] : (axes.length > 0 ? axes[0] : 0);
+            const rawJoyY = (axes.length > 3) ? axes[3] : (axes.length > 1 ? axes[1] : 0);
+            const joyX = typeof rawJoyX === 'number' ? rawJoyX : 0;
+            const joyY = typeof rawJoyY === 'number' ? rawJoyY : 0;
+
+            // DEBUG: Log right controller input when joystick is moved or grip pressed
+            if (handedness === 'right' && (Math.abs(joyX) > 0.05 || Math.abs(joyY) > 0.05 || isClutchPressed)) {
+                if (Math.random() < 0.05) {
+                    console.log(`[VR] Right Ctrl: Grip=${isClutchPressed}, joyX=${joyX.toFixed(3)}, joyY=${joyY.toFixed(3)}, AllAxes=[${axes.map(a => a.toFixed(2)).join(',')}]`);
+                }
+            }
 
             if (isClutchPressed) {
                 // ... Existing hand tracking code ...
@@ -1330,13 +1415,16 @@
                    const lastPose = state.controllers[handedness].lastPose;
                    
                    if (lastPose) {
-                       // ... (Keep existing delta calculation)
                         const dPosVR = new THREE.Vector3().subVectors(currPos, lastPose.position);
                         dPosVR.applyMatrix4(VR_TO_ROBOT);
-                        const POS_SCALE = 0.8; 
-                        dx = dPosVR.x * POS_SCALE;
-                        dy = dPosVR.y * POS_SCALE;
-                        dz = dPosVR.z * POS_SCALE;
+
+                        // Hard clamp position delta: max 2cm per frame (Quest runs at 72Hz,
+                        // so this caps speed at 1.44 m/s which is plenty for teleoperation)
+                        const MAX_POS_DELTA = 0.02;
+                        const POS_SCALE = 0.8;
+                        dx = Math.max(-MAX_POS_DELTA, Math.min(MAX_POS_DELTA, dPosVR.x * POS_SCALE));
+                        dy = Math.max(-MAX_POS_DELTA, Math.min(MAX_POS_DELTA, dPosVR.y * POS_SCALE));
+                        dz = Math.max(-MAX_POS_DELTA, Math.min(MAX_POS_DELTA, dPosVR.z * POS_SCALE));
 
                         // Rotation Delta
                         const qCurr = new THREE.Quaternion(currRot.x, currRot.y, currRot.z, currRot.w);
@@ -1345,11 +1433,13 @@
                         const mDiff = new THREE.Matrix4().makeRotationFromQuaternion(qDiff);
                         const mDiffRob = mDiff.clone().premultiply(VR_TO_ROBOT).multiply(VR_TO_ROBOT_INV);
                         const euler = new THREE.Euler().setFromRotationMatrix(mDiffRob, 'XYZ');
-                        
-                        const ROT_SCALE = 1.0;
-                        droll = euler.x * ROT_SCALE;
-                        dpitch = euler.y * ROT_SCALE;
-                        dyaw = euler.z * ROT_SCALE;
+
+                        // Hard clamp rotation delta: max 0.05 rad/frame ≈ 3.6°/frame = 260°/s max
+                        // Without this, a single Euler gimbal discontinuity could send droll=π
+                        const MAX_ROT_DELTA = 0.05;
+                        droll  = Math.max(-MAX_ROT_DELTA, Math.min(MAX_ROT_DELTA, euler.x));
+                        dpitch = Math.max(-MAX_ROT_DELTA, Math.min(MAX_ROT_DELTA, euler.y));
+                        dyaw   = Math.max(-MAX_ROT_DELTA, Math.min(MAX_ROT_DELTA, euler.z));
                    }
                    state.controllers[handedness].lastPose = {
                         position: new THREE.Vector3().copy(currPos),
@@ -1358,23 +1448,39 @@
                 }
             } else {
                 // Joystick Control (When Clutch NOT pressed)
-                // joyY → Z (arm up/down)
-                // joyX → wrist_roll (twist end-effector)
-                if (Math.abs(joyX) > 0.1 || Math.abs(joyY) > 0.1) {
-                    droll = joyX * 0.02;   // wrist_roll
-                    dz    = -joyY * 0.02;  // Up/Down
-                }
-
+                // Right joystick only: Y-axis → EE Z (arm up/down), X-axis → wrist roll
+                // Left joystick is ignored here (no motion command from left stick).
+                // DEADZONE: 0.1 — Quest joysticks have mechanical drift, deadzone prevents creep.
                 state.controllers[handedness].lastPose = null;
-                if (Math.abs(joyX) <= 0.1 && Math.abs(joyY) <= 0.1) {
-                    droll = 0; dz = 0;
+
+                if (handedness === 'right') {
+                    const DEADZONE = 0.1;
+                    const JOY_SPEED = 0.02; // meters or radians per frame at full deflection
+                    if (Math.abs(joyX) > DEADZONE || Math.abs(joyY) > DEADZONE) {
+                        // Apply deadzone: remap [DEADZONE..1] → [0..1] for smoother start
+                        const signX = Math.sign(joyX);
+                        const signY = Math.sign(joyY);
+                        const normX = Math.abs(joyX) > DEADZONE ? (Math.abs(joyX) - DEADZONE) / (1 - DEADZONE) : 0;
+                        const normY = Math.abs(joyY) > DEADZONE ? (Math.abs(joyY) - DEADZONE) / (1 - DEADZONE) : 0;
+                        droll = signX * normX * JOY_SPEED;  // X-axis → wrist roll
+                        dz    = -signY * normY * JOY_SPEED; // Y-axis → arm up/down (invert: push up = +Z)
+                    } else {
+                        droll = 0; dz = 0;
+                    }
+                    dx = 0; dy = 0; dpitch = 0; dyaw = 0;
+                    gripper = -1;
                 }
-                dx = 0; dy = 0; dpitch = 0; dyaw = 0;
-                gripper = -1;
+                // Left controller joystick: no motion commands in this mode
             }
             
             // 3. COMMON INPUTS
             if (buttons[0]) gripper = buttons[0].value;
+
+            if (!state.controllers[handedness]) state.controllers[handedness] = { lastPose: null };
+            const lastGrip = typeof state.controllers[handedness].lastGripper === 'number' ? state.controllers[handedness].lastGripper : -1;
+            const hasGrip = typeof gripper === 'number' && gripper >= 0;
+            const gripChanged = hasGrip && (lastGrip < 0 || Math.abs(gripper - lastGrip) > 0.01);
+            if (hasGrip) state.controllers[handedness].lastGripper = gripper;
 
             // 4. SYSTEM CONTROLS
             // B button (right, buttons[5]) — hold 1s to exit VR
@@ -1398,22 +1504,67 @@
                 state.resyncTriggered = false;
             }
 
-            // Update Teleop Client with handedness
-            // Send command if EITHER clutch is pressed OR joystick is moved
-            const isJoystickActive = Math.abs(joyX) > 0.1 || Math.abs(joyY) > 0.1;
+            // isJoystickActive: only meaningful for right hand (left hand joystick sets no deltas above)
+            const isJoystickActive = handedness === 'right' && (Math.abs(joyX) > 0.1 || Math.abs(joyY) > 0.1);
 
-            if (isClutchPressed || isJoystickActive) {
-                if (Math.random() < 0.05) console.log(`[VR] Sending motion: droll=${droll.toFixed(3)}, dz=${dz.toFixed(3)}`);
+            if (isClutchPressed || isJoystickActive || gripChanged) {
+                if (Math.random() < 0.05) console.log(`[VR] Sending motion [${handedness}]: dx=${dx.toFixed(3)}, dy=${dy.toFixed(3)}, dz=${dz.toFixed(3)}, droll=${droll.toFixed(3)}, dp=${dpitch.toFixed(3)}, dy_=${dyaw.toFixed(3)}`);
                 
+                // accumulateVRMotion: adds deltas into a per-hand accumulator bucket that
+                // sendCommand() drains each tick. This prevents motion loss if the render
+                // loop runs faster than the WebSocket send loop.
                 window.teleopClient.accumulateVRMotion({ dx, dy, dz, droll, dpitch, dyaw }, handedness);
-                window.teleopClient.updateVRInput({ dx: 0, dy: 0, dz: 0, droll: 0, dpitch: 0, dyaw: 0, gripper, reference_frame: 'base' }, handedness);
+                // updateVRInput with zeros + gripper: sets the non-accumulated (rate) channel.
+                // We use reference_frame 'end_effector' for joystick (relative to wrist),
+                // and 'base' for clutch (absolute world-frame deltas from hand tracking).
+                const refFrame = isClutchPressed ? 'base' : 'end_effector';
+                window.teleopClient.updateVRInput({ dx: 0, dy: 0, dz: 0, droll: 0, dpitch: 0, dyaw: 0, gripper: hasGrip ? gripper : -1, reference_frame: refFrame }, handedness);
             } else {
-                // 未按下 Clutch 且 摇杆未动：只发送心跳，不包含运动或夹爪动作
+                // No motion: send heartbeat with zero motion and no gripper change
                 window.teleopClient.updateVRInput({ dx: 0, dy: 0, dz: 0, droll: 0, dpitch: 0, dyaw: 0, gripper: -1, reference_frame: 'end_effector' }, handedness);
             }
         }
         
         renderer.render(scene, camera);
+      }
+
+      function pollSimulatedGamepad() {
+          if (!window.teleopClient) return;
+          if (!navigator.getGamepads) return;
+          const pads = navigator.getGamepads();
+          if (!pads) return;
+          const gp = Array.from(pads).find(p => p && (p.axes?.length || p.buttons?.length));
+          if (!gp) return;
+
+          const axes = gp.axes || [];
+          const buttons = gp.buttons || [];
+
+          const rawJoyX = (axes.length > 2) ? axes[2] : (axes.length > 0 ? axes[0] : 0);
+          const rawJoyY = (axes.length > 3) ? axes[3] : (axes.length > 1 ? axes[1] : 0);
+          const joyX = typeof rawJoyX === 'number' ? rawJoyX : 0;
+          const joyY = typeof rawJoyY === 'number' ? rawJoyY : 0;
+
+          const DEADZONE = 0.1;
+          const JOY_SPEED = 0.02;
+          let dz = 0;
+          let droll = 0;
+          if (Math.abs(joyX) > DEADZONE || Math.abs(joyY) > DEADZONE) {
+              const signX = Math.sign(joyX);
+              const signY = Math.sign(joyY);
+              const normX = Math.abs(joyX) > DEADZONE ? (Math.abs(joyX) - DEADZONE) / (1 - DEADZONE) : 0;
+              const normY = Math.abs(joyY) > DEADZONE ? (Math.abs(joyY) - DEADZONE) / (1 - DEADZONE) : 0;
+              droll = signX * normX * JOY_SPEED;
+              dz    = -signY * normY * JOY_SPEED;
+          }
+
+          const gripper = buttons[0] ? buttons[0].value : -1;
+
+          if (Math.abs(droll) > 0.0001 || Math.abs(dz) > 0.0001) {
+              window.teleopClient.accumulateVRMotion({ dx: 0, dy: 0, dz, droll, dpitch: 0, dyaw: 0 }, 'right');
+              window.teleopClient.updateVRInput({ dx: 0, dy: 0, dz: 0, droll: 0, dpitch: 0, dyaw: 0, gripper, reference_frame: 'end_effector' }, 'right');
+          } else {
+              window.teleopClient.updateVRInput({ dx: 0, dy: 0, dz: 0, droll: 0, dpitch: 0, dyaw: 0, gripper: -1, reference_frame: 'end_effector' }, 'right');
+          }
       }
       
       // ========================================

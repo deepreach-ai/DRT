@@ -22,22 +22,21 @@ class TeleoperationController:
         self.velocity_limiter = velocity_limiter or VelocityLimiter()
         
         # State for both hands.
-        # These are fallback positions only — overridden at startup by set_current_pose()
-        # from the robot's actual FK. Chosen so wrist_flex stays within SO-101 range (~-107° to 65°).
+        # These are fallback positions — overridden at startup by set_current_pose().
+        # Set to None so we can detect if resync hasn't happened yet.
         self.poses = {
-            "left": {
-                "position": np.array([-0.15, 0.0, 0.38]),
-                "orientation": np.array([1.0, 0.0, 0.0, 0.0])
-            },
-            "right": {
-                "position": np.array([0.15, 0.0, 0.38]),
-                "orientation": np.array([1.0, 0.0, 0.0, 0.0])
-            }
+            "left":  {"position": None, "orientation": None},
+            "right": {"position": None, "orientation": None},
         }
+        self._pose_initialized = {"left": False, "right": False}
         
-        # Current state (for backward compatibility if needed, though we should use self.poses)
-        self.current_position = self.poses["right"]["position"]
-        self.current_orientation = self.poses["right"]["orientation"]
+        # Fallback if set_current_pose is never called (should not happen in practice)
+        self._fallback_pos = np.array([0.0, 0.0, 0.6], dtype=float)
+        self._fallback_ori = np.array([1.0, 0.0, 0.0, 0.0], dtype=float)
+
+        # Backward-compat aliases
+        self.current_position = self._fallback_pos
+        self.current_orientation = self._fallback_ori
         
         self.last_command_time: Optional[float] = None
         
@@ -65,8 +64,17 @@ class TeleoperationController:
         # Get handedness
         handedness = command.handedness.lower()
         if handedness not in self.poses:
-            handedness = "right" # Default
-            
+            handedness = "right"
+
+        # Guard: if pose was never initialized from FK, reject command and warn
+        if not self._pose_initialized.get(handedness, False):
+            print(f"[Controller] WARNING: pose for '{handedness}' not initialized from robot FK! "
+                  f"Ignoring command to prevent sending arm to wrong position. "
+                  f"Check that backend.connect() returns a valid pose.")
+            # Return current "zero" pose with no motion
+            return (self._fallback_pos.copy(), self._fallback_ori.copy(),
+                    command.gripper_state,
+                    {'workspace_violation': False, 'velocity_violation': False})
         # Get current state for this hand
         current_pos = self.poses[handedness]["position"]
         current_ori = self.poses[handedness]["orientation"]
@@ -140,21 +148,25 @@ class TeleoperationController:
     
     def set_current_pose(self, position: np.ndarray, orientation: np.ndarray, handedness: str = "right"):
         """
-        Set the current pose (e.g., from robot feedback)
+        Set the current pose (e.g., from robot FK on startup or after resync)
         """
         h = handedness.lower()
         if h not in self.poses:
             h = "right"
-            
-        self.poses[h]["position"] = position.copy()
-        self.poses[h]["orientation"] = orientation.copy()
-        
-        # Normalize orientation
-        self.poses[h]["orientation"] = self.poses[h]["orientation"] / np.linalg.norm(self.poses[h]["orientation"])
-        
+
+        pos = np.array(position, dtype=float)
+        ori = np.array(orientation, dtype=float)
+        ori = ori / np.linalg.norm(ori)
+
+        self.poses[h]["position"] = pos.copy()
+        self.poses[h]["orientation"] = ori.copy()
+        if not self._pose_initialized.get(h, False):
+            print(f"[Controller] Pose initialized for '{h}': pos={pos.round(3)}")
+        self._pose_initialized[h] = True
+
         if h == "right":
-            self.current_position = self.poses[h]["position"].copy()
-            self.current_orientation = self.poses[h]["orientation"].copy()
+            self.current_position = pos.copy()
+            self.current_orientation = ori.copy()
     
     def get_statistics(self) -> Dict[str, Any]:
         """Get controller statistics"""

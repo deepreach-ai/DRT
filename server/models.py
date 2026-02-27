@@ -23,13 +23,13 @@ class DeltaCommand(BaseModel):
     droll: float = 0.0  # radians
     dpitch: float = 0.0
     dyaw: float = 0.0
-    gripper_state: float = 0.0 # 0.0 (open) to 1.0 (closed), or -1.0 for ignore
+    gripper_state: float = -1.0 # 0.0 (open) to 1.0 (closed), -1.0 = ignore
     reference_frame: ReferenceFrame = ReferenceFrame.END_EFFECTOR
-    max_velocity: float = 0.1  # m/s
-    max_angular_velocity: float = 0.5  # rad/s
+    max_velocity: float = 0.5  # m/s — raised from 0.1 so joystick deltas aren't near-zero
+    max_angular_velocity: float = 1.0  # rad/s
     timestamp: float = 0.0
     client_id: str = "default"
-    handedness: str = "right"  # "left" or "right"
+    handedness: str = "right"  # 'left' or 'right'
 
 
 class JointCommand(BaseModel):
@@ -64,12 +64,12 @@ class TeleopStatus(BaseModel):
 @dataclass
 class WorkspaceLimits:
     """Workspace bounding box limits"""
-    min_x: float = -1.0
-    max_x: float = 1.0
-    min_y: float = -1.0
-    max_y: float = 1.0
-    min_z: float = 0.0
-    max_z: float = 1.5
+    min_x: float = -1.2
+    max_x: float = 1.2
+    min_y: float = -1.2
+    max_y: float = 1.2
+    min_z: float = 0.05   # RM75-B base is at 0.05m
+    max_z: float = 1.8    # RM75-B fully extended ~1.1m above base
 
     def contains(self, position: np.ndarray) -> bool:
         """Check if position is within workspace"""

@@ -182,12 +182,27 @@ class MujocoRobotBackend(RobotBackend):
         with self.update_lock:
             self._last_target_pos = np.array(position, dtype=float)
             self._last_target_quat = np.array(orientation, dtype=float)
+
+            # Diagnostic: log every 100th command
+            if self._command_count % 100 == 0:
+                cur_pos, _ = self._get_site_pose(self._ee_site_id)
+                print(f"[MuJoCo] cmd#{self._command_count} "
+                      f"EE_actual=[{cur_pos[0]:.3f},{cur_pos[1]:.3f},{cur_pos[2]:.3f}] "
+                      f"target=[{position[0]:.3f},{position[1]:.3f},{position[2]:.3f}] "
+                      f"qpos7={[round(float(self._data.qpos[i]),3) for i in range(7)]}")
+
             self._solve_ik(target_pos=self._last_target_pos, target_quat=self._last_target_quat, velocity_limit=velocity_limit)
-            
-            # Handle gripper for follower
+
+            # After IK, expose the ACTUAL achieved EE pose so the server can
+            # sync the controller back to reality and prevent integrator windup.
+            actual_pos, actual_quat = self._get_site_pose(self._ee_site_id)
+            self.actual_commanded_position = actual_pos.copy()
+            self.actual_commanded_orientation = actual_quat.copy()
+
+            # Handle gripper
             if gripper_state >= 0:
                 self._set_gripper(gripper_state)
-                
+
             self._command_count += 1
             self.last_update_time = time.time()
         return True
@@ -250,9 +265,15 @@ class MujocoRobotBackend(RobotBackend):
             if jid != -1:
                 qpos_addr = self._model.jnt_qposadr[jid]
                 # Map 0 (open) -> 1 (closed) to joint limits
-                # Note: 'state' from controller is 0 (open) to 1 (closed) usually
                 val = range_min + state * (range_max - range_min)
                 self._data.qpos[qpos_addr] = val
+                # Also update the actuator ctrl target for this joint.
+                # Find which actuator drives this joint and set its ctrl.
+                for i in range(int(self._model.nu)):
+                    if int(self._model.actuator_trntype[i]) == 0:
+                        if int(self._model.actuator_trnid[i, 0]) == jid:
+                            self._data.ctrl[i] = val
+                            break
         except:
             pass
 
@@ -524,6 +545,24 @@ class MujocoRobotBackend(RobotBackend):
             self._clamp_joint_limits()
 
         mujoco.mj_forward(model, data)
+
+        # CRITICAL: Push IK solution into actuator ctrl targets.
+        # The XML uses <position> actuators (PD controllers). These read
+        # data.ctrl[] as their target setpoint — they do NOT move just
+        # because data.qpos changed. Without this, physics pulls the arm
+        # back to ctrl=0 (home) every step, making the robot appear frozen.
+        # For each position actuator, copy the IK-solved joint qpos into ctrl.
+        nu = int(model.nu)
+        for i in range(nu):
+            # actuator_trntype 0 = joint transmission
+            if int(model.actuator_trntype[i]) == 0:
+                joint_id = int(model.actuator_trnid[i, 0])
+                qpos_adr = int(model.jnt_qposadr[joint_id])
+                data.ctrl[i] = data.qpos[qpos_adr]
+
+        # Run one physics step so PD actuators apply forces and the
+        # simulation state advances to reflect the new configuration.
+        mujoco.mj_step(model, data)
 
     def _clamp_joint_limits(self) -> None:
         model = self._model

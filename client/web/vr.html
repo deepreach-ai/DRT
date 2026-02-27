@@ -1311,8 +1311,8 @@
 
       // Matrix to transform from VR Frame (Y-up, -Z-fwd, X-right)
       // to Robot Frame (Z-up, X-fwd, Y-left)
-      // X_rob = -Z_vr
-      // Y_rob = +X_vr  (sign flipped vs original to match user's left/right perspective)
+      // X_rob = +Z_vr
+      // Y_rob = +X_vr
       // Z_rob = Y_vr
       let VR_TO_ROBOT, VR_TO_ROBOT_INV;
 
@@ -1321,7 +1321,7 @@
           if (THREE) {
               clearInterval(initMatricesInterval);
               VR_TO_ROBOT = new THREE.Matrix4().set(
-                 0,  0, -1,  0,
+                 0,  0,  1,  0,
                  1,  0,  0,  0,
                  0,  1,  0,  0,
                  0,  0,  0,  1

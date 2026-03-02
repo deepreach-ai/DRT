@@ -765,17 +765,17 @@
         // For now, use MJPEG streams
         // TODO: Switch to WebRTC for lower latency
         
-        // Left camera (Arm 1)
-        const leftUrl = `${state.serverUrl}/api/v1/video/left/mjpeg?token=${state.token}`;
+        // Left camera — use real webcam (index=1) if available, fallback to backend render
+        const leftUrl = `${state.serverUrl}/api/v1/video/webcam/mjpeg?token=${state.token}&index=1`;
         setupVideoStream(leftUrl, 'left');
         
-        // Right camera (Arm 2)
-        const rightUrl = `${state.serverUrl}/api/v1/video/right/mjpeg?token=${state.token}`;
+        // Right camera (Arm 2) — try webcam index 2, will gracefully fail if not connected
+        const rightUrl = `${state.serverUrl}/api/v1/video/webcam/mjpeg?token=${state.token}&index=2`;
         setupVideoStream(rightUrl, 'right');
         
-        // Depth camera
-        const depthUrl = `${state.serverUrl}/api/v1/video/depth/mjpeg?token=${state.token}`;
-        setupVideoStream(depthUrl, 'depth');
+        // Depth camera — not used for now, skip
+        // const depthUrl = `${state.serverUrl}/api/v1/video/depth/mjpeg?token=${state.token}`;
+        // setupVideoStream(depthUrl, 'depth');
       }
       
       function setupVideoStream(url, name) {

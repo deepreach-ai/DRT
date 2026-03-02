@@ -675,6 +675,45 @@ async def video_mjpeg(token: str):
     )
 
 
+@app.get("/api/v1/video/webcam/mjpeg")
+async def video_webcam_mjpeg(token: str, index: int = 1):
+    """Stream a real physical webcam by OpenCV device index (default: 1 = external camera)."""
+    if _auth.auth_enabled() and not _auth.verify_token(token):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    import cv2
+
+    cap = cv2.VideoCapture(index)
+    if not cap.isOpened():
+        raise HTTPException(status_code=503, detail=f"Cannot open camera {index}")
+
+    boundary = b"frame"
+
+    async def generate():
+        try:
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                _, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+                jpg = jpeg.tobytes()
+                yield (
+                    b"--" + boundary + b"\r\n"
+                    b"Content-Type: image/jpeg\r\n"
+                    + f"Content-Length: {len(jpg)}\r\n\r\n".encode()
+                    + jpg + b"\r\n"
+                )
+                await asyncio.sleep(1 / 15)  # 15 fps
+        finally:
+            cap.release()
+
+    return StreamingResponse(
+        generate(),
+        media_type="multipart/x-mixed-replace; boundary=frame",
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
 @app.get("/api/v1/video/{camera_name}/mjpeg")
 async def video_camera_mjpeg(camera_name: str, token: str):
     server = get_server()

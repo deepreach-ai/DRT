@@ -1093,41 +1093,48 @@
             return;
         }
 
-        // Left eye screen (shows left camera)
-        // Use pre-created texture if available, or create placeholder
-        const leftMat = new THREE.MeshBasicMaterial({ 
-            map: videoTextures.left.texture,
-            side: THREE.DoubleSide
+        // In AR passthrough mode with no active streams, skip all screens
+        // so the real-world view is not occluded by black planes.
+        if (state.isPassthrough) {
+            const hasAnyStream = Object.values(state.videoStreams).some(v => v);
+            if (!hasAnyStream) {
+                console.log('[VR] AR passthrough with no streams — skipping video screens');
+                return;
+            }
+        }
+
+        // Only create a screen for each camera that is actually streaming.
+        // Positions: if only one stream, centre it and fill the view.
+        const activeStreams = Object.entries(state.videoStreams).filter(([, v]) => v).map(([k]) => k);
+        const count = activeStreams.length;
+        console.log(`[VR] Creating ${count} video screen(s) for:`, activeStreams);
+
+        // Layout configs keyed by stream count
+        // Single stream → large centred screen; two → side by side; three → original layout
+        const layouts = {
+            left:  { x: count === 1 ? 0    : -0.85, y: count === 1 ? 1.6 : 1.5, z: -2,   ry: count === 1 ?  0    :  0.15, w: count === 1 ? 3.2 : 1.6, h: count === 1 ? 1.8 : 0.9 },
+            right: { x: count === 1 ? 0    :  0.85, y: count === 1 ? 1.6 : 1.5, z: -2,   ry: count === 1 ?  0    : -0.15, w: count === 1 ? 3.2 : 1.6, h: count === 1 ? 1.8 : 0.9 },
+            depth: { x: 0,                           y: count <= 2 ? 1.6 : 0.6, z: count <= 2 ? -2 : -1.8, ry: 0, rx: count <= 2 ? 0 : -0.2, w: count === 1 ? 3.2 : 0.8, h: count === 1 ? 1.8 : 0.45 }
+        };
+
+        activeStreams.forEach(name => {
+            const cfg = layouts[name];
+            const mat = new THREE.MeshBasicMaterial({
+                map: videoTextures[name].texture,
+                side: THREE.DoubleSide
+            });
+            const mesh = new THREE.Mesh(new THREE.PlaneGeometry(cfg.w, cfg.h), mat);
+            mesh.position.set(cfg.x, cfg.y, cfg.z);
+            if (cfg.ry) mesh.rotation.y = cfg.ry;
+            if (cfg.rx) mesh.rotation.x = cfg.rx;
+            scene.add(mesh);
+
+            // Keep existing references for texture updates
+            if (name === 'left')  leftEyeScreen = mesh;
+            if (name === 'right') rightEyeScreen = mesh;
+            if (name === 'depth') depthHUD = mesh;
         });
-        const leftGeometry = new THREE.PlaneGeometry(1.6, 0.9);
-        leftEyeScreen = new THREE.Mesh(leftGeometry, leftMat);
-        leftEyeScreen.position.set(-0.85, 1.5, -2);
-        // Rotate slightly inward
-        leftEyeScreen.rotation.y = 0.15;
-        scene.add(leftEyeScreen);
-        
-        // Right eye screen (shows right camera)
-        const rightMat = new THREE.MeshBasicMaterial({ 
-            map: videoTextures.right.texture,
-            side: THREE.DoubleSide
-        });
-        const rightGeometry = new THREE.PlaneGeometry(1.6, 0.9);
-        rightEyeScreen = new THREE.Mesh(rightGeometry, rightMat);
-        rightEyeScreen.position.set(0.85, 1.5, -2);
-        rightEyeScreen.rotation.y = -0.15;
-        scene.add(rightEyeScreen);
-        
-        // Depth HUD (smaller, bottom center)
-        const depthMat = new THREE.MeshBasicMaterial({ 
-            map: videoTextures.depth.texture,
-            side: THREE.DoubleSide
-        });
-        const depthGeometry = new THREE.PlaneGeometry(0.8, 0.45);
-        depthHUD = new THREE.Mesh(depthGeometry, depthMat);
-        depthHUD.position.set(0, 0.6, -1.8);
-        depthHUD.rotation.x = -0.2;
-        scene.add(depthHUD);
-        
+
         console.log('[VR] Video screens created');
       }
       

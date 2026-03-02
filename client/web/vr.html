@@ -275,6 +275,13 @@
           </div>
           
           <div class="status-item">
+            <div class="status-label">AR Passthrough</div>
+            <div class="status-value" id="ar-status">
+              <span class="pill warn">Checking...</span>
+            </div>
+          </div>
+
+          <div class="status-item">
             <div class="status-label">Video Streams</div>
             <div class="status-value" id="video-status">
               <span class="pill warn">0/3</span>
@@ -431,7 +438,9 @@
         lastControllerPose: null,
         clutchActive: false,
         // Robot Model
-        robot: null
+        robot: null,
+        // Passthrough mode (AR session when no camera streams)
+        isPassthrough: false
       };
       
       // DOM Elements
@@ -533,13 +542,13 @@
       async function checkXRSupport() {
         // Force simulation button to be visible for debugging
         $('btn-simulate-vr').style.display = 'block';
-        
+
         if ('xr' in navigator) {
           try {
             const supported = await navigator.xr.isSessionSupported('immersive-vr');
             if (supported) {
               updateStatus('xr-support', 'Supported ✓', 'ok');
-              console.log('[VR] WebXR is supported!');
+              console.log('[VR] WebXR VR supported');
             } else {
               updateStatus('xr-support', 'Not Found (Use Simulator)', 'bad');
               console.warn('[VR] WebXR not supported on this device');
@@ -548,8 +557,24 @@
             updateStatus('xr-support', 'Error (Use Simulator)', 'bad');
             console.error('[VR] Error checking WebXR support:', err);
           }
+
+          // Check AR passthrough support separately
+          try {
+            const arSupported = await navigator.xr.isSessionSupported('immersive-ar');
+            if (arSupported) {
+              updateStatus('ar-status', 'Supported ✓', 'ok');
+              console.log('[VR] WebXR AR passthrough supported');
+            } else {
+              updateStatus('ar-status', 'Not supported — will use VR', 'warn');
+              console.warn('[VR] immersive-ar not supported on this device/browser');
+            }
+          } catch (err) {
+            updateStatus('ar-status', 'Check failed: ' + err.message, 'bad');
+            console.warn('[VR] AR support check error:', err);
+          }
         } else {
           updateStatus('xr-support', 'Not Found (Use Simulator)', 'bad');
+          updateStatus('ar-status', 'N/A', 'bad');
           console.warn('[VR] navigator.xr not found');
         }
       }
@@ -888,21 +913,45 @@
         
         try {
           console.log('[VR] Requesting VR session...');
-          
+
           let session;
-          try {
+          const hasVideoStreams = Object.values(state.videoStreams).some(v => v);
+
+          // If no camera streams are active, try AR passthrough (Quest 3 sees real world)
+          if (!hasVideoStreams && !state.isVirtual) {
+            try {
+              // Skip isSessionSupported (unreliable on some Quest builds); just try directly.
+              // No required features — local-floor as required can reject the AR session.
+              session = await navigator.xr.requestSession('immersive-ar', {
+                optionalFeatures: ['local-floor', 'hand-tracking']
+              });
+              state.isPassthrough = true;
+              updateStatus('ar-status', 'Active ✓', 'ok');
+              console.log('[VR] AR passthrough started, blend mode:', session.environmentBlendMode);
+            } catch (e) {
+              const msg = e.message || e.name || String(e);
+              console.warn('[VR] AR passthrough failed (' + msg + '), falling back to VR');
+              updateStatus('ar-status', 'Failed: ' + msg, 'bad');
+              state.isPassthrough = false;
+            }
+          }
+
+          if (!session) {
+            state.isPassthrough = false;
+            try {
               // Try with local-floor (preferred)
               session = await navigator.xr.requestSession('immersive-vr', {
                 requiredFeatures: ['local-floor'],
                 optionalFeatures: ['hand-tracking', 'layers']
               });
-          } catch (e) {
+            } catch (e) {
               console.warn('[VR] local-floor not supported, trying fallback...');
               // Fallback to viewer or local if local-floor fails
               session = await navigator.xr.requestSession('immersive-vr', {
                 requiredFeatures: ['viewer'], // Minimal requirement
                 optionalFeatures: ['local-floor', 'local', 'hand-tracking', 'layers']
               });
+            }
           }
           
           state.xrSession = session;
@@ -941,6 +990,7 @@
         state.inVR = false;
         state.xrSession = null;
         state.simulated = false;
+        state.isPassthrough = false;
         
         // Show 2D UI
         ui2d.style.display = 'flex';
@@ -968,7 +1018,12 @@
         
         // Create Three.js scene
         scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x111a2e);
+        // Transparent background for AR passthrough; dark for VR
+        if (state.isPassthrough || (session && session.environmentBlendMode === 'alpha-blend')) {
+          scene.background = null;
+        } else {
+          scene.background = new THREE.Color(0x111a2e);
+        }
         
         // Camera
         camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -978,13 +1033,18 @@
         scene.add(cameraGroup);
         
         // Renderer
-        renderer = new THREE.WebGLRenderer({ 
+        renderer = new THREE.WebGLRenderer({
           canvas: canvas,
           antialias: true,
           alpha: true
         });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        
+
+        // Transparent clear for passthrough so real world shows through
+        if (state.isPassthrough || (session && session.environmentBlendMode === 'alpha-blend')) {
+          renderer.setClearColor(0x000000, 0);
+        }
+
         if (session) {
             renderer.xr.enabled = true;
             renderer.xr.setSession(session);
@@ -1321,50 +1381,69 @@
             const joyY = axes[3] || axes[1] || 0;
 
             if (isClutchPressed) {
-                // ... Existing hand tracking code ...
                 const pose = frame.getPose(inputSource.gripSpace, refSpace);
                 if (pose) {
-                   // ... (Keep existing logic)
                    const currPos = pose.transform.position;
                    const currRot = pose.transform.orientation;
-                   const lastPose = state.controllers[handedness].lastPose;
-                   
+                   const ctrl = state.controllers[handedness];
+
+                   // EMA low-pass filter on raw controller pose.
+                   // Suppresses ~1-3mm per-frame Quest 3 tracking noise before it enters
+                   // the delta computation.  POSE_ALPHA: higher = more responsive but
+                   // noisier; lower = smoother with ~1/(1-alpha) frame lag.
+                   const POSE_ALPHA = 0.5;  // ~1 frame lag at 90Hz, ~60% noise reduction
+                   if (!ctrl.filteredPos) {
+                       // First frame after clutch press: seed filter from raw pose
+                       ctrl.filteredPos = new THREE.Vector3().copy(currPos);
+                       ctrl.filteredRot = new THREE.Quaternion(currRot.x, currRot.y, currRot.z, currRot.w);
+                   } else {
+                       ctrl.filteredPos.lerp(new THREE.Vector3().copy(currPos), POSE_ALPHA);
+                       ctrl.filteredRot.slerp(
+                           new THREE.Quaternion(currRot.x, currRot.y, currRot.z, currRot.w),
+                           POSE_ALPHA
+                       );
+                   }
+
+                   const lastPose = ctrl.lastPose;
                    if (lastPose) {
-                       // ... (Keep existing delta calculation)
-                        const dPosVR = new THREE.Vector3().subVectors(currPos, lastPose.position);
+                        // Delta from filtered pose to filtered pose — noise-free
+                        const dPosVR = new THREE.Vector3().subVectors(ctrl.filteredPos, lastPose.position);
                         dPosVR.applyMatrix4(VR_TO_ROBOT);
-                        const POS_SCALE = 0.8; 
+                        const POS_SCALE = 0.8;
                         dx = dPosVR.x * POS_SCALE;
                         dy = dPosVR.y * POS_SCALE;
                         dz = dPosVR.z * POS_SCALE;
 
-                        // Rotation Delta
-                        const qCurr = new THREE.Quaternion(currRot.x, currRot.y, currRot.z, currRot.w);
-                        const qPrev = new THREE.Quaternion(lastPose.orientation.x, lastPose.orientation.y, lastPose.orientation.z, lastPose.orientation.w);
+                        // Rotation delta computed from filtered quaternions
+                        const qCurr = ctrl.filteredRot.clone();
+                        const qPrev = lastPose.orientation;
                         const qDiff = qCurr.clone().multiply(qPrev.clone().invert());
                         const mDiff = new THREE.Matrix4().makeRotationFromQuaternion(qDiff);
                         const mDiffRob = mDiff.clone().premultiply(VR_TO_ROBOT).multiply(VR_TO_ROBOT_INV);
                         const euler = new THREE.Euler().setFromRotationMatrix(mDiffRob, 'XYZ');
-                        
+
                         const ROT_SCALE = 1.0;
-                        droll = euler.x * ROT_SCALE;
+                        droll  = euler.x * ROT_SCALE;
                         dpitch = euler.y * ROT_SCALE;
-                        dyaw = euler.z * ROT_SCALE;
+                        dyaw   = euler.z * ROT_SCALE;
                    }
-                   state.controllers[handedness].lastPose = {
-                        position: new THREE.Vector3().copy(currPos),
-                        orientation: new THREE.Quaternion(currRot.x, currRot.y, currRot.z, currRot.w)
+                   // Store filtered pose so next frame's delta is also noise-free
+                   ctrl.lastPose = {
+                        position:    ctrl.filteredPos.clone(),
+                        orientation: ctrl.filteredRot.clone()
                    };
                 }
             } else {
                 // Joystick Control (When Clutch NOT pressed)
-                // joyY → Z (arm up/down)
-                // joyX → wrist_roll (twist end-effector)
+                // joyY → Z (arm up/down), joyX → wrist_roll (twist end-effector)
                 if (Math.abs(joyX) > 0.1 || Math.abs(joyY) > 0.1) {
-                    droll = joyX * 0.02;   // wrist_roll
-                    dz    = -joyY * 0.02;  // Up/Down
+                    droll = joyX * 0.02;
+                    dz    = -joyY * 0.02;
                 }
 
+                // Reset filter state so it re-seeds cleanly on next clutch press
+                state.controllers[handedness].filteredPos = null;
+                state.controllers[handedness].filteredRot = null;
                 state.controllers[handedness].lastPose = null;
                 if (Math.abs(joyX) <= 0.1 && Math.abs(joyY) <= 0.1) {
                     droll = 0; dz = 0;
@@ -1385,6 +1464,32 @@
                 state.exitTimer = null;
             }
 
+            // DEBUG: log all right-hand button presses to identify correct button indices
+            if (handedness === 'right') {
+                for (let _bi = 0; _bi < buttons.length; _bi++) {
+                    if (buttons[_bi] && buttons[_bi].pressed && Math.random() < 0.1) {
+                        console.log(`[VR] Right btn[${_bi}] pressed value=${buttons[_bi].value?.toFixed(2)}`);
+                    }
+                }
+            }
+
+            // A button (right, buttons[4]) — hold 0.5s to return to home position
+            if (handedness === 'right' && buttons[4] && buttons[4].pressed) {
+                if (!state.homeTimer) {
+                    state.homeTimer = Date.now();
+                    console.log('[VR] A button held — hold 0.5s to home');
+                } else if (Date.now() - state.homeTimer > 500) {
+                    state.homeTimer = null;
+                    console.log('[VR] A button held 0.5s — sending home request');
+                    fetch(`${state.serverUrl}/api/v1/robot/home`, { method: 'POST' })
+                        .then(r => r.json())
+                        .then(d => console.log('[VR] Homed. Position:', d.position))
+                        .catch(e => console.error('[VR] Home failed:', e));
+                }
+            } else if (handedness === 'right') {
+                state.homeTimer = null;
+            }
+
             // Y button (left, buttons[5]) — re-sync controller tracking to robot's actual position
             if (handedness === 'left' && buttons[5] && buttons[5].pressed) {
                 if (!state.resyncTriggered) {
@@ -1398,19 +1503,38 @@
                 state.resyncTriggered = false;
             }
 
-            // Update Teleop Client with handedness
+            // Only right hand sends motion commands to the robot
+            if (handedness !== 'right') continue;
+
             // Send command if EITHER clutch is pressed OR joystick is moved
             const isJoystickActive = Math.abs(joyX) > 0.1 || Math.abs(joyY) > 0.1;
 
             if (isClutchPressed || isJoystickActive) {
-                if (Math.random() < 0.05) console.log(`[VR] Sending motion: droll=${droll.toFixed(3)}, dz=${dz.toFixed(3)}`);
-                
+                // Sanitize: replace NaN/Infinity with 0 to prevent server-side Pydantic errors
+                const safe = (v) => (isFinite(v) ? v : 0);
+                dx = safe(dx); dy = safe(dy); dz = safe(dz);
+                droll = safe(droll); dpitch = safe(dpitch); dyaw = safe(dyaw);
+
+                // Accumulate then flush immediately from the XR render loop.
+                // setInterval is throttled in VR mode (Chrome background-tab policy),
+                // so motion must be flushed here rather than waiting for the timer.
                 window.teleopClient.accumulateVRMotion({ dx, dy, dz, droll, dpitch, dyaw }, handedness);
-                window.teleopClient.updateVRInput({ dx: 0, dy: 0, dz: 0, droll: 0, dpitch: 0, dyaw: 0, gripper, reference_frame: 'base' }, handedness);
-            } else {
-                // 未按下 Clutch 且 摇杆未动：只发送心跳，不包含运动或夹爪动作
-                window.teleopClient.updateVRInput({ dx: 0, dy: 0, dz: 0, droll: 0, dpitch: 0, dyaw: 0, gripper: -1, reference_frame: 'end_effector' }, handedness);
+                window.teleopClient.updateVRInput({ gripper: gripper >= 0 ? gripper : -1, reference_frame: 'base' }, handedness);
+                window.teleopClient.sendCommand();
+            } else if (gripper >= 0) {
+                // Gripper-only: trigger works even when clutch is not held.
+                // Only send when the value changes by >2% to avoid spam.
+                const lastTrig = state.controllers[handedness].lastTriggerVal ?? -1;
+                if (Math.abs(gripper - lastTrig) > 0.02) {
+                    window.teleopClient.sendVRCommandDirect(
+                        { dx: 0, dy: 0, dz: 0, droll: 0, dpitch: 0, dyaw: 0, reference_frame: 'base' },
+                        gripper, handedness
+                    );
+                }
             }
+            // Track last trigger value for change detection
+            if (gripper >= 0) state.controllers[handedness].lastTriggerVal = gripper;
+            // Idle: setInterval heartbeat (zero motion) keeps the deadman switch alive.
         }
         
         renderer.render(scene, camera);

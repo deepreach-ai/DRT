@@ -388,6 +388,31 @@ async def resync_controller():
     return {"status": "failed", "message": "Could not read current pose from backend"}
 
 
+@app.post("/api/v1/robot/home")
+async def robot_home():
+    """Move the robot to its home joint configuration (blocking until complete).
+    Re-syncs the controller's virtual position to the post-home pose so VR
+    tracking continues from the correct origin."""
+    server = get_server()
+    if not server.backend or not server.backend.is_connected():
+        raise HTTPException(status_code=503, detail="Robot not connected")
+    if not hasattr(server.backend, '_move_to_home'):
+        raise HTTPException(status_code=501, detail="Backend does not support homing")
+
+    loop = asyncio.get_event_loop()
+    success = await loop.run_in_executor(None, server.backend._move_to_home)
+
+    # Re-sync controller to the post-home pose
+    pos, ori = server.backend.get_current_pose()
+    if pos is not None and ori is not None:
+        server.controller.set_current_pose(pos, ori)
+
+    return {
+        "status": "ok" if success else "error",
+        "position": pos.tolist() if pos is not None else None,
+    }
+
+
 @app.websocket("/ws/v1/teleop")
 async def websocket_endpoint(websocket: WebSocket):
     """
@@ -458,29 +483,36 @@ async def websocket_endpoint(websocket: WebSocket):
 
     async def state_loop():
         while True:
-            status = server.get_status()
-            state = get_video_state()
-            payload = {
-                "type": "state",
-                "ts": time.time(),
-                "status": status.model_dump(),
-                "robot": state,
-            }
-            await websocket.send_json(payload)
-            _recorder.write(session_id, {"type": "state", "ts": payload["ts"], "payload": payload})
-            
-            jpg = None
-            if hasattr(server.backend, "render"):
-                try:
-                    jpg = server.backend.render(width=960, height=540)
-                except Exception:
-                    pass
-            
-            if jpg is None:
-                jpg = render_status_frame(960, 540, state)
-                
-            _recorder.save_frame(session_id, jpg)
-            await asyncio.sleep(0.02) # 50Hz (Increased for lower latency)
+            try:
+                status = server.get_status()
+                state = get_video_state()
+                payload = {
+                    "type": "state",
+                    "ts": time.time(),
+                    "status": status.model_dump(),
+                    "robot": state,
+                }
+                await websocket.send_json(payload)
+                _recorder.write(session_id, {"type": "state", "ts": payload["ts"], "payload": payload})
+
+                jpg = None
+                if hasattr(server.backend, "render"):
+                    try:
+                        jpg = server.backend.render(width=960, height=540)
+                    except Exception:
+                        pass
+
+                if jpg is None:
+                    jpg = render_status_frame(960, 540, state)
+
+                _recorder.save_frame(session_id, jpg)
+            except WebSocketDisconnect:
+                raise  # Let caller handle natural disconnect
+            except Exception as e:
+                import traceback as _tb
+                print(f"[WebSocket] state_loop error: {e}")
+                _tb.print_exc()
+            await asyncio.sleep(0.02) # 50Hz
 
     state_task = asyncio.create_task(state_loop())
 
@@ -506,11 +538,31 @@ async def websocket_endpoint(websocket: WebSocket):
             current_time = time.time()
 
             if msg_type == "delta":
-                command = DeltaCommand(**command_dict)
+                # Sanitize null float values (NaN from JS becomes null in JSON)
+                _float_fields = {'dx','dy','dz','droll','dpitch','dyaw',
+                                 'max_velocity','max_angular_velocity',
+                                 'gripper_state','timestamp'}
+                for _f in _float_fields:
+                    if _f in command_dict and command_dict[_f] is None:
+                        command_dict[_f] = 0.0
+                try:
+                    command = DeltaCommand(**command_dict)
+                except Exception as _e:
+                    print(f"[WebSocket] Bad delta command, skipping: {_e}")
+                    continue
                 if command.timestamp <= 0:
                     command.timestamp = current_time
+                # Log non-trivial motion commands for diagnostics
+                _any_motion = any(abs(getattr(command, f, 0.0)) > 1e-6
+                                  for f in ('dx','dy','dz','droll','dpitch','dyaw'))
+                if _any_motion:
+                    print(f"[WS] delta dx={command.dx:.4f} dy={command.dy:.4f} dz={command.dz:.4f} "
+                          f"droll={command.droll:.4f} dpitch={command.dpitch:.4f} dyaw={command.dyaw:.4f} "
+                          f"grip={command.gripper_state:.2f}")
+                elif command.gripper_state > 0.0:
+                    print(f"[WS] gripper-only: grip={command.gripper_state:.3f}")
                 result = server.process_command(command)
-                
+
             elif msg_type == "joint":
                 command = JointCommand(**command_dict)
                 if command.timestamp <= 0:
@@ -525,7 +577,10 @@ async def websocket_endpoint(websocket: WebSocket):
 
     except WebSocketDisconnect:
         pass
-    except Exception:
+    except Exception as e:
+        import traceback
+        print(f"[WebSocket] Error: {e}")
+        traceback.print_exc()
         await websocket.close(code=1011)
     finally:
         state_task.cancel()
@@ -710,6 +765,15 @@ def run_server(host: str = "0.0.0.0", port: int = 8000, backend_type: str = "moc
          env_port = os.getenv("TELEOP_SOARM_PORT")
          if env_port:
              backend_config['port'] = env_port
+
+    if backend_type in ["realman", "realman_sdk", "rm75b", "rm65"]:
+        if 'host' not in backend_config:
+            backend_config['host'] = os.getenv("TELEOP_REALMAN_HOST", "192.168.1.100")
+        if 'port' not in backend_config:
+            backend_config['port'] = int(os.getenv("TELEOP_REALMAN_PORT", "8080"))
+        backend_config['home_on_connect'] = not args.no_home
+        if args.home_joints:
+            backend_config['home_joints'] = [float(v) for v in args.home_joints.split(',')]
     
     # Also check env for robot_config
     if not robot_config:
@@ -735,6 +799,12 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int, default=8000, help="Port number")
     parser.add_argument("--backend", type=str, default="mock", help="Backend type (mock, isaac, or mujoco)")
     parser.add_argument("--robot-port", type=str, default=None, help="Robot serial port (e.g. /dev/ttyUSB0)")
+    parser.add_argument("--realman-host", type=str, default=None, help="Realman robot IP (default: 192.168.1.100)")
+    parser.add_argument("--realman-port", type=int, default=None, help="Realman robot TCP port (default: 8080)")
+    parser.add_argument("--no-home", action="store_true", default=False,
+                        help="Skip home move on connect (start from current robot pose)")
+    parser.add_argument("--home-joints", type=str, default=None,
+                        help="Home joint angles in degrees, comma-separated, e.g. '0,-30,0,90,0,45,0'")
     parser.add_argument("--ssl-keyfile", type=str, default=None, help="Path to TLS private key file")
     parser.add_argument("--ssl-certfile", type=str, default=None, help="Path to TLS certificate file")
     parser.add_argument("--robot-config", type=str, default=None, help="Path to robot config YAML")
@@ -744,4 +814,11 @@ if __name__ == "__main__":
     ssl_keyfile = os.getenv("TELEOP_SSL_KEYFILE", args.ssl_keyfile)
     ssl_certfile = os.getenv("TELEOP_SSL_CERTFILE", args.ssl_certfile)
     robot_config = os.getenv("TELEOP_ROBOT_CONFIG", args.robot_config)
+
+    # Inject Realman connection params into env so run_server picks them up
+    if args.realman_host:
+        os.environ["TELEOP_REALMAN_HOST"] = args.realman_host
+    if args.realman_port:
+        os.environ["TELEOP_REALMAN_PORT"] = str(args.realman_port)
+
     run_server(host=args.host, port=args.port, backend_type=args.backend, robot_port=args.robot_port, ssl_keyfile=ssl_keyfile, ssl_certfile=ssl_certfile, robot_config=robot_config)

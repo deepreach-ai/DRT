@@ -132,6 +132,17 @@ class BackendFactory:
             from backends.mock_vr_backend import MockVRBackend
             name = kwargs.get('name', 'mock_vr')
             return MockVRBackend(name=name)
-            
+
+        elif backend_type.lower() in ['realman', 'realman_sdk', 'rm75b', 'rm65']:
+            from backends.realman_backend import RealmanBackend
+            host             = kwargs.get('host', '192.168.1.100')
+            port             = int(kwargs.get('port', 8080))
+            name             = kwargs.get('name', 'realman_rm75b')
+            home_on_connect  = kwargs.get('home_on_connect', True)
+            home_joints      = kwargs.get('home_joints', None)
+            return RealmanBackend(host=host, port=port, name=name,
+                                  home_on_connect=home_on_connect,
+                                  home_joints=home_joints)
+
         else:
             raise ValueError(f"Unknown backend type: {backend_type}")

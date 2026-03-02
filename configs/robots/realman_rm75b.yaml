@@ -11,7 +11,7 @@ isaac_sim:
 real_robot:
   backend_type: "realman_sdk"
   connection:
-    ip: "192.168.1.100"
+    ip: "192.168.1.18"
     port: 8080
 
 # Workspace limits (meters) - approximate based on 750mm reach

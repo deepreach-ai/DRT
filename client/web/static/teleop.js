@@ -333,6 +333,36 @@ class TeleopClient {
         }
     }
 
+    // Send a VR delta command immediately at the VR render rate (90Hz).
+    // Called directly from renderVRFrame() — bypasses the 50Hz setInterval accumulator
+    // so motion reaches the robot in the same frame it was measured.
+    sendVRCommandDirect(delta, gripper, handedness = "right") {
+        if (!this.connected || !this.ws) return;
+        const command = {
+            dx: delta.dx || 0,
+            dy: delta.dy || 0,
+            dz: delta.dz || 0,
+            droll: delta.droll || 0,
+            dpitch: delta.dpitch || 0,
+            dyaw: delta.dyaw || 0,
+            reference_frame: delta.reference_frame || 'base',
+            max_velocity: 0.5,
+            max_angular_velocity: 1.0,
+            timestamp: Date.now() / 1000,
+            client_id: 'web_client',
+            handedness: handedness
+        };
+        if (gripper >= 0) command.gripper_state = gripper;
+        try {
+            this.lastCommandTime = Date.now();
+            this.ws.send(JSON.stringify(command));
+            this.commandCount++;
+            if (this.commandCountEl) this.commandCountEl.textContent = this.commandCount;
+        } catch (error) {
+            console.error('Failed to send VR command:', error);
+        }
+    }
+
     sendCommand() {
         if (!this.connected || !this.ws) return;
         

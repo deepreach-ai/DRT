@@ -96,10 +96,14 @@ class TeleoperationController:
         # Convert current orientation to rotation matrix
         R_current = quaternions.quat2mat(current_ori)
         
-        # Create rotation matrix from delta euler angles
+        # Create rotation matrix from delta euler angles.
+        # axes='rxyz' = intrinsic XYZ, matching Three.js Euler order 'XYZ' used in vr.html.
+        # The transforms3d default ('sxyz' = extrinsic XYZ = intrinsic ZYX) is a different
+        # convention and produces wrong rotations when the axes are combined.
         R_delta = euler.euler2mat(delta_euler[0],
                                   delta_euler[1],
-                                  delta_euler[2])
+                                  delta_euler[2],
+                                  axes='rxyz')
         
         # Combine rotations based on reference frame
         if command.reference_frame == ReferenceFrame.END_EFFECTOR:

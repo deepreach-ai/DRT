@@ -9,3 +9,4 @@ mujoco==3.1.6
 feetech-servo-sdk>=1.0.0
 PyYAML>=6.0
 opencv-python>=4.8.0
+robotic-arm>=2.0.0  # Realman SDK for RM75B/RM65 (Ethernet control)

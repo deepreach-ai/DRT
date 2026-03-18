@@ -111,7 +111,7 @@ http://localhost:8000/web/vr.html?urdf=so101
 ### HTTPS/WSS (Optional Secure Context)
 Some headset/browser setups prefer HTTPS for WebXR:
 ```bash
-./generate_cert.sh
+./scripts/utils/generate_cert.sh
 python3 run_server.py --backend soarm --soarm-port /dev/tty.usbmodemXXXX \
   --port 8443 --ssl-key key.pem --ssl-cert cert.pem
 adb reverse tcp:8443 tcp:8443
@@ -147,9 +147,9 @@ http://<host-ip>:8000/web/vr.html?urdf=so101_dual
 Note: login first to receive an auth token used by the video endpoints.
 
 ### Startup Scripts
-- SO-ARM101 (sim): `./start_so101_vr_sim.sh`
-- SO-ARM101 (real): `./start_so101_vr_real.sh`
-- Dual SO-ARM101: `./start_dual_so101_vr.sh`
+- SO-ARM101 (sim): `./scripts/start/start_so101_vr_sim.sh`
+- SO-ARM101 (real): `./scripts/start/start_so101_vr_real.sh`
+- Dual SO-ARM101: `./scripts/start/start_dual_so101_vr.sh`
 
 ## 📚 Documentation
 

@@ -2,7 +2,7 @@
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
-DeepReach Teleoperation Platform is a universal, cloud-native teleoperation system designed to bridge the gap between simulation and real-world robotic manipulation. It supports heterogeneous embodiments (6-DoF/7-DoF), multiple input methods (VR, Keyboard, Joystick), and seamless switching between local and cloud environments.
+DeepReach Teleoperation Platform is a cloud-native teleoperation system for the SO-ARM101 robotic arm, designed to bridge the gap between simulation and real-world manipulation. It supports multiple input methods (VR, Keyboard, Joystick) and seamless switching between local and cloud environments.
 
 ![Interface Demo](docs/demo.gif)
 
@@ -13,14 +13,8 @@ DeepReach Teleoperation Platform is a universal, cloud-native teleoperation syst
 *   **Keyboard & Mouse:** Accessible browser-based control for quick testing.
 *   **Joystick:** Xbox/Gamepad support for intuitive operation.
 
-### 🤖 Universal Embodiment Support
-*   **Heterogeneous Robots:** Supports 6-DoF (e.g., SO-ARM101) and 7-DoF (e.g., Realman RM65) arms.
-*   **Unified Interface:** Abstracted backend allows controlling different robots with the same client.
-*   **Supported Hardware:**
-    *   **SO-ARM101** (6-DoF)
-    *   **Realman RM65/RM75** (7-DoF)
-    *   **Realman RM75B** (7-DOF, VR-Optimized)
-    *   **Lingyu** (URDF support)
+### 🤖 Supported Hardware
+*   **SO-ARM101** (6-DoF) — single arm and dual arm configurations
 
 ### 🌍 Simulation & Real World
 *   **MuJoCo (Step 1):** Fast, local physics simulation for rapid development and testing.
@@ -30,11 +24,10 @@ DeepReach Teleoperation Platform is a universal, cloud-native teleoperation syst
 ### 📱 Cross-Platform
 *   **Server:** Linux (Ubuntu), macOS.
 *   **Client:** Any web browser (Desktop, Android, VR headsets).
-*   **Android Support:** Control via mobile browser or dedicated app (planned).
 
 ## 🚀 Scenarios
-*   **Research:** Universal platform for teleoperation data collection.
-*   **Logistics:** Box sorting and handling (e.g., Amazon return processing).
+*   **Research:** Teleoperation data collection for robot learning.
+*   **Logistics:** Box sorting and handling (e.g., warehouse return processing).
 *   **Remote Operation:** Low-latency control over public internet.
 
 ## ⚡ Quick Start
@@ -54,17 +47,7 @@ Runs Web UI and API on a single port.
 # Mock backend (no hardware)
 python3 run_server.py --backend mock
 
-# MuJoCo simulation (SO-101)
-python3 run_server.py --backend mujoco \
-  --mujoco-xml robots/so101/so101.xml \
-  --mujoco-ee gripperframe
-
-# MuJoCo simulation (RM75B VR-optimized)
-python3 run_server.py --backend mujoco \
-  --mujoco-xml robots/rm75b/rm75b_vr_v2.xml \
-  --mujoco-ee ee_site
-
-# MuJoCo simulation (SO-ARM101 VR-optimized)
+# MuJoCo simulation (SO-ARM101)
 python3 run_server.py --backend mujoco \
   --mujoco-xml robots/so101/so101.xml \
   --mujoco-ee gripperframe
@@ -87,7 +70,7 @@ Login (default):
 curl http://localhost:8000/api/v1/statistics | python3 -m json.tool
 ```
 Expected fields include:
-- backend: mujoco/mock/isaac/soarm/so101_dual
+- backend: mujoco/mock/isaac/soarm
 - status: connected
 - current_position / orientation statistics
 
@@ -104,16 +87,15 @@ References:
 The VR client uses WebXR and sends 50 Hz control deltas over WebSocket.
 
 ### Modes
-- Single Arm (SO-ARM101): `?urdf=so101`
+- Single Arm: `?urdf=so101`
 - Dual Arm: `?urdf=so101_dual`
-- RM75B: `?urdf=RM75-B`
 
 ### Connect Over Wi‑Fi
 1. Put the Quest 3 and your computer on the same network.
 2. Open the Quest Browser.
 3. Navigate to:
    - `http://<host-ip>:8000/web/vr.html?urdf=so101`
-4. Login (operator/operator), click “Enter VR Mode”.
+4. Login (operator/operator), click "Enter VR Mode".
 
 ### Wired USB (ADB Reverse)
 Lowest latency and easy local access:
@@ -159,14 +141,12 @@ http://<host-ip>:8000/web/vr.html?urdf=so101_dual
 - B button: exit VR
 
 ### Video Streams
-- Generic MJPEG:
-  - `/api/v1/video/mjpeg?token=...`
-- Per camera MJPEG:
-  - `/api/v1/video/{camera_name}/mjpeg?token=...` where camera_name is `left`, `right`, `depth` if supported.
+- Generic MJPEG: `/api/v1/video/mjpeg?token=...`
+- Per camera MJPEG: `/api/v1/video/{camera_name}/mjpeg?token=...` where camera_name is `left`, `right`, `depth`
+
 Note: login first to receive an auth token used by the video endpoints.
 
 ### Startup Scripts
-- RM75B: `./start_rm75b_vr.sh`
 - SO-ARM101 (sim): `./start_so101_vr_sim.sh`
 - SO-ARM101 (real): `./start_so101_vr_real.sh`
 - Dual SO-ARM101: `./start_dual_so101_vr.sh`
@@ -188,4 +168,3 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 
 *   **NVIDIA:** For Isaac Sim and investment support.
 *   **OpenTelevision:** For inspiration on teleoperation frameworks.
-*   **Realman & Lingyu:** For hardware support.

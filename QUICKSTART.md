@@ -1,6 +1,6 @@
-# 🚀 DRT Quick Start Guide
+# Quick Start Guide
 
-Welcome to DRT (Distributed Robot Teleoperation). This guide helps you quickly run simulation (MuJoCo), real robot control, and Web/VR clients.
+Welcome to DRT (DeepReach Teleoperation). This guide helps you quickly run simulation (MuJoCo), real robot control, and Web/VR clients with the SO-ARM101.
 
 ---
 
@@ -8,7 +8,7 @@ Welcome to DRT (Distributed Robot Teleoperation). This guide helps you quickly r
 
 ### Requirements
 - Python 3.10+
-- Optional hardware: SO-ARM101, Realman, Quest 3/3S, Webcam/RealSense
+- Optional hardware: SO-ARM101 arm, Meta Quest 3/3S, Webcam/RealSense
 
 ### Steps
 ```bash
@@ -27,14 +27,14 @@ FastAPI server provides both Web UI and REST APIs.
 python3 run_server.py --backend mock
 ```
 
-### MuJoCo simulation (SO-101 example)
+### MuJoCo simulation (SO-ARM101)
 ```bash
 python3 run_server.py --backend mujoco \
   --mujoco-xml robots/so101/so101.xml \
   --mujoco-ee gripperframe
 ```
 
-### Isaac backend
+### Isaac Sim backend
 ```bash
 python3 run_server.py --backend isaac
 ```
@@ -49,6 +49,7 @@ http://localhost:8000/web/
 Default login:
 - Username: operator
 - Password: operator
+
 Tip: Leave Base URL empty, or set to `http://localhost:8000`.
 
 ---
@@ -58,9 +59,9 @@ Tip: Leave Base URL empty, or set to `http://localhost:8000`.
 curl http://localhost:8000/api/v1/statistics | python3 -m json.tool
 ```
 Output should include:
-- backend: mujoco/mock/isaac
+- backend: mujoco/mock/isaac/soarm
 - status: connected
-- pose/position statistics, etc.
+- pose/position statistics
 
 ---
 
@@ -78,29 +79,56 @@ python3 client/keyboard_client.py
 ---
 
 ## 6. VR (Quest 3/3S)
-- In Web UI, click “Enter VR Mode”
-- For WebXR (HTTPS/SSL), see [VR Setup](docs/VR_SETUP.md)
-- For remote HTTPS exposure via ngrok/reverse proxy, see [LOCAL_VALIDATION_GUIDE](docs/LOCAL_VALIDATION_GUIDE.md)
+
+### Single Arm
+```
+http://<host-ip>:8000/web/vr.html?urdf=so101
+```
+
+### Dual Arm
+```
+http://<host-ip>:8000/web/vr.html?urdf=so101_dual
+```
+
+In Web UI, click "Enter VR Mode". For WebXR HTTPS setup, see [VR Setup](docs/VR_SETUP.md).
+
+### Wired (lowest latency)
+```bash
+adb reverse tcp:8000 tcp:8000
+# then open http://localhost:8000/web/vr.html?urdf=so101 on headset
+```
 
 ---
 
-## 7. Real Robot (SO-ARM101 example)
+## 7. Real Robot (SO-ARM101)
 ```bash
+# Single arm
 python3 run_server.py --backend soarm --soarm-port /dev/ttyUSB0
+
+# Dual arm
+export TELEOP_BACKEND=so101_dual
+export TELEOP_LEFT_PORT=/dev/tty.usbmodemLEFT
+export TELEOP_RIGHT_PORT=/dev/tty.usbmodemRIGHT
+python3 server/teleop_server.py --port 8000
 ```
-More setup and deployment: [SOARM_SETUP](docs/SOARM_SETUP.md), [SOARM_DEPLOYMENT_GUIDE](docs/SOARM_DEPLOYMENT_GUIDE.md)
+
+More setup: [SOARM_SETUP](docs/SOARM_SETUP.md)
 
 ---
 
 ## 8. Video Streams
-Supports multiple sources (Webcam, RealSense, Isaac Sim). Web UI shows placeholders or MJPEG/RTC video. See docs for advanced configs.
+Supports Webcam, RealSense, and Isaac Sim. Web UI shows live MJPEG streams.
+- Generic: `/api/v1/video/mjpeg?token=...`
+- Per camera: `/api/v1/video/{left|right|depth}/mjpeg?token=...`
+
+Note: login first to receive an auth token.
 
 ---
 
 ## 9. Troubleshooting
-- 404 page: visit `http://localhost:8000/web/`
-- Login failed: use `operator/operator`; Base URL empty or `http://localhost:8000`
-- WebSocket failed: ensure server is running, Base URL is correct
-- Remote access: verify security group port (default 8000), see deployment docs
+- **404 page:** visit `http://localhost:8000/web/`
+- **Login failed:** use `operator/operator`; Base URL empty or `http://localhost:8000`
+- **WebSocket failed:** ensure server is running, Base URL is correct
+- **Remote access:** verify port 8000 is open, see [AWS Deployment](docs/AWS_DEPLOYMENT_GUIDE.md)
 
 More guides in [docs/](docs/).

@@ -18,9 +18,22 @@ __pycache__/
 certs/
 *.key
 *.crt
+*.pem
+*.p12
+*.cer
+*.der
+*.jks
+*.keystore
+*.kdbx
 
 # ngrok local config
 ngrok.yml
+
+# Environment variables
+.env
+.env.*
+secrets/
+keys/
 
 # Internal Documents
 .trae/documents
@@ -34,25 +47,5 @@ test_camera_frames/
 *.pdf
 *.tar.gz
 
-# Certificates / secrets
-*.pem
-
 # Empty dirs
 librealsense/
-*.pem
-*.key
-*.crt
-*.p12
-*.cer
-*.der
-*.jks
-*.keystore
-*.kdbx
-.env
-.env.*
-secrets/
-certs/
-keys/
-ngrok.yml
-ngrok.yml
-ngrok.yml

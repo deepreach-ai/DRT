@@ -6,6 +6,7 @@ env/
 # Node
 node_modules/
 package-lock.json
+package.json
 
 # Python bytecode
 __pycache__/
@@ -34,6 +35,10 @@ ngrok.yml
 .env.*
 secrets/
 keys/
+
+# Internal / AI assistant config
+CLAUDE.md
+.claude/
 
 # Internal Documents
 .trae/documents
